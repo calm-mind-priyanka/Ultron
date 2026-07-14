@@ -168,21 +168,22 @@ async def verification_settings(client, query):
     btn = [[
         InlineKeyboardButton('ᴛᴜʀɴ ᴏꜰꜰ' if verify_status else 'ᴛᴜʀɴ ᴏɴ', callback_data=f'toggleverify#is_verify#{verify_status}#{grp_id}'),
     ],[
-        InlineKeyboardButton('ꜱʜᴏʀᴛɴᴇʀ', callback_data=f'changeshortner#{grp_id}'),
+        InlineKeyboardButton('ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'changeshortner#{grp_id}'),
     ],[
         InlineKeyboardButton('ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ɢᴀᴘ', callback_data=f'changetime#{grp_id}'),
     ],[
         InlineKeyboardButton('ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'changetutorial#{grp_id}')
     ],[
-        InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'grp_pm#{grp_id}')
+        InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'grp_pm#{grp_id}')
     ]]
 
     text = (
-        "<b>ᴀᴅᴠᴀɴᴄᴇ ꜱᴇᴛᴛɪɴɢꜱ ᴍᴏᴅᴇ 📳\n\n"
-        "ʏᴏᴜ ᴄᴀɴ ᴄᴜꜱᴛᴏᴍɪᴢᴇᴅ ꜱʜᴏʀᴛɴᴇʀ ᴠᴀʟᴜᴇꜱ ᴀɴᴅ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ɢᴀᴘ ꜰʀᴏᴍ ʜᴇʀᴇ ✅\n"
-        "ᴄʜᴏᴏꜱᴇ ꜰʀᴏᴍ ʙᴇʟᴏᴡ 👇\n\n"
-        f"✅ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ꜱᴛᴀᴛᴜꜱ : {verify_text}</b>"
-    )
+    "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+    "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ꜱʜᴏʀᴛʟɪɴᴋꜱ ᴀɴᴅ\n"
+    "ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
+    "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
+    f"✅ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ : {verify_text}</b>"
+)
 
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
@@ -207,15 +208,16 @@ async def log_settings(client, query):
         InlineKeyboardButton('ᴄʜᴀɴɢᴇ ʟᴏɢ', callback_data=f'changelog#{grp_id}'),
         InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ ʟᴏɢ', callback_data=f'removelog#{grp_id}'),
     ],[
-        InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'grp_pm#{grp_id}')
+        InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'grp_pm#{grp_id}')
     ]]
 
     text = (
-        "<b>ᴀᴅᴠᴀɴᴄᴇ ꜱᴇᴛᴛɪɴɢꜱ ᴍᴏᴅᴇ 📳\n\n"
-        "ʏᴏᴜ ᴄᴀɴ ᴄᴜꜱᴛᴏᴍɪᴢᴇᴅ ʟᴏɢ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ꜰʀᴏᴍ ʜᴇʀᴇ ✅\n"
-        "ᴄʜᴏᴏꜱᴇ ꜰʀᴏᴍ ʙᴇʟᴏᴡ 👇\n\n"
-        f"📝 ʟᴏɢ ᴄʜᴀɴɴᴇʟ : {log_text}</b>"
-    )
+    "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+    "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ʟᴏɢ ᴄʜᴀɴɴᴇʟ\n"
+    "ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
+    "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
+    f"📝 ʟᴏɢ ᴄʜᴀɴɴᴇʟ : {log_text}</b>"
+)
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
@@ -244,15 +246,16 @@ async def fsub_settings(client, query):
         InlineKeyboardButton('ꜱᴇᴛ ꜰꜱᴜʙ', callback_data=f'set_fsub_ui#{grp_id}'),
         InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ ꜰꜱᴜʙ', callback_data=f'remove_fsub_ui#{grp_id}'),
     ],[
-        InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'grp_pm#{grp_id}')
+        InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'grp_pm#{grp_id}')
     ]]
 
     text = (
-        "<b>ᴀᴅᴠᴀɴᴄᴇ ꜱᴇᴛᴛɪɴɢꜱ ᴍᴏᴅᴇ 📳\n\n"
-        "ʏᴏᴜ ᴄᴀɴ ᴄᴜꜱᴛᴏᴍɪᴢᴇᴅ ꜰꜱᴜʙ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ꜰʀᴏᴍ ʜᴇʀᴇ ✅\n"
-        "ᴄʜᴏᴏꜱᴇ ꜰʀᴏᴍ ʙᴇʟᴏᴡ 👇\n\n"
-        f"🚫 ꜰꜱᴜʙ ᴄʜᴀɴɴᴇʟ : \n{fsub_text}</b>"
-    )
+    "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+    "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ꜰꜱᴜʙ ᴄʜᴀɴɴᴇʟ\n"
+    "ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
+    "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
+    f"🚫 ꜰꜱᴜʙ ᴄʜᴀɴɴᴇʟ :\n{fsub_text}</b>"
+)
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
@@ -276,15 +279,16 @@ async def caption_settings(client, query):
         InlineKeyboardButton('ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ', callback_data=f'changecaption#{grp_id}'),
         InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ ᴄᴀᴘᴛɪᴏɴ', callback_data=f'removecaption#{grp_id}'),
     ],[
-        InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'grp_pm#{grp_id}')
+        InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'grp_pm#{grp_id}')
     ]]
 
     text = (
-        "<b>ᴀᴅᴠᴀɴᴄᴇ ꜱᴇᴛᴛɪɴɢꜱ ᴍᴏᴅᴇ 📳\n\n"
-        "ʏᴏᴜ ᴄᴀɴ ᴄᴜꜱᴛᴏᴍɪᴢᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ꜰʀᴏᴍ ʜᴇʀᴇ ✅\n"
-        "ᴄʜᴏᴏꜱᴇ ꜰʀᴏᴍ ʙᴇʟᴏᴡ 👇\n\n"
-        f"📂 ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ : {caption_text}</b>"
-    )
+    "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+    "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴄᴜꜱᴛᴏᴍ\n"
+    "ᴄᴀᴘᴛɪᴏɴ ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
+    "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
+    f"📂 ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ : {caption_text}</b>"
+)
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
@@ -469,7 +473,7 @@ async def change_caption(client, query):
     await save_group_settings(int(grp_id), f'caption', caption_msg.text)
     await client.send_message(LOG_API_CHANNEL, f"#Set_Caption\n\nɢʀᴏᴜᴘ ɴᴀᴍᴇ : {title}\n\nɢʀᴏᴜᴘ ɪᴅ: {grp_id}\nɪɴᴠɪᴛᴇ ʟɪɴᴋ : {invite_link}\n\nᴜᴘᴅᴀᴛᴇᴅ ʙʏ : {query.from_user.username}")
     btn = [
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'caption_setgs#{grp_id}')]
+        [InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'caption_setgs#{grp_id}')]
     ]
     try:
         await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ✅\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: <code>{caption_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
@@ -506,7 +510,7 @@ btn = [
         InlineKeyboardButton('3ʀᴅ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#3#{grp_id}')
     ],
     [
-        InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'verification_setgs#{grp_id}')
+        InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'verification_setgs#{grp_id}')
     ]
 ]
 text = (
@@ -551,7 +555,7 @@ async def shortener_menu_handler(client, query):
     btn = [
         [InlineKeyboardButton(set_text, callback_data=f'set_verify{num}#{grp_id}')],
         [InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ', callback_data=f'rm_verify{num}#{grp_id}')],
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'changeshortner#{grp_id}')]
+        [InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'changeshortner#{grp_id}')]
     ]
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
@@ -622,7 +626,7 @@ async def set_shortener(client, query):
     await client.send_message(LOG_API_CHANNEL, log_message, disable_web_page_preview=True)
 
     btn = [
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'shortner_menu#{shortner_num}#{grp_id}')]
+        [InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'shortner_menu#{shortner_num}#{grp_id}')]
     ]
     try:
         await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ꜱʜᴏʀᴛɴᴇʀ {shortner_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴡᴇʙꜱɪᴛᴇ: <code>{url_msg.text}</code>\nᴀᴘɪ: <code>{key_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
@@ -641,7 +645,7 @@ async def change_time(client, query):
     btn = [
         [InlineKeyboardButton('ᴛɪᴍᴇ 1', callback_data=f'time_menu#1#{grp_id}')],
         [InlineKeyboardButton('ᴛɪᴍᴇ 2', callback_data=f'time_menu#2#{grp_id}')],
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'verification_setgs#{grp_id}')]
+        [InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'verification_setgs#{grp_id}')]
     ]
     try:
         await query.message.edit("<b>ᴄʜᴏᴏꜱᴇ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b>", reply_markup=InlineKeyboardMarkup(btn))
@@ -673,7 +677,7 @@ async def time_menu_handler(client, query):
     btn = [
         [InlineKeyboardButton(set_text, callback_data=f'set_time{num}#{grp_id}')],
         [InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ', callback_data=f'rm_time{num}#{grp_id}')],
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'changetime#{grp_id}')]
+        [InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'changetime#{grp_id}')]
     ]
     try:
         await query.message.edit(f"<b>⏰ Time {num} Settings:</b>\n\n⏱️ Value: {val or 'Not Set'}", reply_markup=InlineKeyboardMarkup(btn))
@@ -753,7 +757,7 @@ async def set_time(client, query):
     await client.send_message(LOG_API_CHANNEL, log_message, disable_web_page_preview=True)
 
     btn = [
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'time_menu#{time_num}#{grp_id}')]
+        [InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'time_menu#{time_num}#{grp_id}')]
     ]
     try:
         await query.message.edit(f"<b>{time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴜᴘᴅᴀᴛᴇ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ✅\n\nᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {time_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
@@ -778,7 +782,7 @@ btn = [
         InlineKeyboardButton('3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#3#{grp_id}')
     ],
     [
-        InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'verification_setgs#{grp_id}')
+        InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'verification_setgs#{grp_id}')
     ]
 ]
     try:
@@ -812,7 +816,7 @@ async def tutorial_menu_handler(client, query):
     btn = [
         [InlineKeyboardButton(set_text, callback_data=f'set_tutorial{num}#{grp_id}')],
         [InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ', callback_data=f'rm_tutorial{num}#{grp_id}')],
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'changetutorial#{grp_id}')]
+        [InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'changetutorial#{grp_id}')]
     ]
     try:
         await query.message.edit(f"<b>📹 Tutorial {num} Settings:</b>\n\n🔗 Value: {val or 'Not Set'}", reply_markup=InlineKeyboardMarkup(btn))
@@ -875,7 +879,7 @@ async def set_tutorial(client, query):
     await client.send_message(LOG_API_CHANNEL, log_message, disable_web_page_preview=True)
 
     btn = [
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'tutorial_menu#{tutorial_num}#{grp_id}')]
+        [InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'tutorial_menu#{tutorial_num}#{grp_id}')]
     ]
     try:
         await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
