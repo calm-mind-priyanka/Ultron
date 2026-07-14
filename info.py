@@ -15,8 +15,8 @@ def is_enabled(value, default):
 
 
 SESSION = environ.get('SESSION', 'media_search')
-API_ID = int(environ.get('API_ID', ''))
-API_HASH = environ.get('API_HASH', '')
+API_ID = int(environ.get('API_ID', '24222039'))
+API_HASH = environ.get('API_HASH', '6dd2dc70434b2f577f76a2e993135662')
 BOT_TOKEN = environ.get('BOT_TOKEN', "7599959222:AAHP-w3NH-Mipy-Lm10bw7DeLn7AW4dBn-I")
 
 CACHE_TIME = int(environ.get('CACHE_TIME', 300))
@@ -29,17 +29,17 @@ SPELL_IMG = environ.get("SPELL_IMG", "https://graph.org/file/13702ae26fb05df5266
 SUBSCRIPTION = (environ.get('SUBSCRIPTION', 'https://telegra.ph/file/f983d857f3ce40795e4b8.jpg'))
 FSUB_IMG = (environ.get('FSUB_IMG', 'https://i.ibb.co/cShkPjcZ/x.jpg')).split() 
 
-ADMINS = [int(admin) if id_pattern.search(admin) else admin for admin in environ.get('ADMINS', '').split()] 
-CHANNELS = [int(ch) if id_pattern.search(ch) else ch for ch in environ.get('CHANNELS', '-100').split()]
-LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-100'))  
-BIN_CHANNEL = int(environ.get('BIN_CHANNEL', '-100'))  
-MOVIE_UPDATE_CHANNEL = int(environ.get('MOVIE_UPDATE_CHANNEL', '-100'))  
-PREMIUM_LOGS = int(environ.get('PREMIUM_LOGS', '-100')) 
+ADMINS = [int(admin) if id_pattern.search(admin) else admin for admin in environ.get('ADMINS', '6046055058').split()] 
+CHANNELS = [int(ch) if id_pattern.search(ch) else ch for ch in environ.get('CHANNELS', '-1002409171321').split()]
+LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-1002433610423'))  
+BIN_CHANNEL = int(environ.get('BIN_CHANNEL', '-1002433610423'))  
+MOVIE_UPDATE_CHANNEL = int(environ.get('MOVIE_UPDATE_CHANNEL', ' -1002433610423'))  
+PREMIUM_LOGS = int(environ.get('PREMIUM_LOGS', '-1002433610423')) 
 auth_grp = environ.get('AUTH_GROUP')
 AUTH_GROUPS = [int(ch) for ch in auth_grp.split()] if auth_grp else None
-reqst_channel = environ.get('REQST_CHANNEL_ID', '-100') 
+reqst_channel = environ.get('REQST_CHANNEL_ID', ' -1002433610423') 
 REQST_CHANNEL = int(reqst_channel) if reqst_channel and id_pattern.search(reqst_channel) else None
-support_chat_id = environ.get('SUPPORT_CHAT_ID', '-100') 
+support_chat_id = environ.get('SUPPORT_CHAT_ID', '-1002459015261') 
 SUPPORT_CHAT_ID = int(support_chat_id) if support_chat_id and id_pattern.search(support_chat_id) else None
 
 DATABASE_URI = environ.get('DATABASE_URI', "mongodb+srv://mayurgogoi821:Ae5eEMIJV9aYED81@cluster0.930txsz.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
