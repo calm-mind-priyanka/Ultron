@@ -28,7 +28,7 @@ async def group_setting_buttons(grp_id):
                 InlineKeyboardButton('​ℹ️ ᴍᴀx ʀᴇꜱᴜʟᴛꜱ', callback_data=f'setgs#max_btn#{settings["max_btn"]}#{grp_id}',),
                 InlineKeyboardButton('10' if settings["max_btn"] else f'{MAX_B_TN}', callback_data=f'setgs#max_btn#{settings["max_btn"]}#{grp_id}',),
             ],[
-                InlineKeyboardButton('ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ', callback_data=f'verification_setgs#{grp_id}',),
+                InlineKeyboardButton('🖇️ ꜱᴇᴛ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'verification_setgs#{grp_id}',),
             ],[
                 InlineKeyboardButton('ʟᴏɢ ᴄʜᴀɴɴᴇʟ', callback_data=f'log_setgs#{grp_id}',),
                 InlineKeyboardButton('​📝 ꜰɪʟᴇꜱ ᴄᴀᴘᴛɪᴏɴ', callback_data=f'caption_setgs#{grp_id}',),
