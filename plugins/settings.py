@@ -497,19 +497,40 @@ async def change_shortener(client, query):
     user_id = query.from_user.id if query.from_user else None
     if not await is_check_admin(client, int(grp_id), user_id):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
-    btn = [
-        [InlineKeyboardButton('ꜱʜᴏʀᴛɴᴇʀ 1', callback_data=f'shortner_menu#1#{grp_id}')],
-        [InlineKeyboardButton('ꜱʜᴏʀᴛɴᴇʀ 2', callback_data=f'shortner_menu#2#{grp_id}')],
-        [InlineKeyboardButton('ꜱʜᴏʀᴛɴᴇʀ 3', callback_data=f'shortner_menu#3#{grp_id}')],
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'verification_setgs#{grp_id}')]
+btn = [
+    [
+        InlineKeyboardButton('1ꜱᴛ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#1#{grp_id}'),
+        InlineKeyboardButton('2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#2#{grp_id}')
+    ],
+    [
+        InlineKeyboardButton('3ʀᴅ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#3#{grp_id}')
+    ],
+    [
+        InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'verification_setgs#{grp_id}')
     ]
-    try:
-        await query.message.edit("<b>ᴄʜᴏᴏꜱᴇ ꜱʜᴏʀᴛɴᴇʀ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b>", reply_markup=InlineKeyboardMarkup(btn))
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        await query.message.edit("<b>ᴄʜᴏᴏꜱᴇ ꜱʜᴏʀᴛɴᴇʀ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b>", reply_markup=InlineKeyboardMarkup(btn))
-    except MessageNotModified:
-        pass
+]
+text = (
+    "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴠᴇʀɪꜰʏ ᴍᴏᴅᴇ</b>\n"
+    "<b>ꜱᴇᴛ ʏᴏᴜʀ 1ꜱᴛ ᴀɴᴅ 2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ ᴜʀʟ ᴀɴᴅ ᴀᴘɪ...</b>\n\n"
+    "<b>[ᴅᴇꜰᴀᴜʟᴛ] 1ꜱᴛ ꜱʜᴏʀᴛʟɪɴᴋ</b> - <code>indiaearnx.com</code>\n"
+    "<code>b33e4055fe3b0d50a57b3f2d3b108b28b3e97f4</code>\n\n"
+    "<b>[ᴅᴇꜰᴀᴜʟᴛ] 2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ</b> - <code>inshorturl.com</code>\n"
+    "<code>c536241a32ce26d873d4d25f1ca37f38ef45810a</code>"
+)
+
+try:
+    await query.message.edit(
+        text,
+        reply_markup=InlineKeyboardMarkup(btn)
+    )
+except FloodWait as e:
+    await asyncio.sleep(e.value)
+    await query.message.edit(
+        text,
+        reply_markup=InlineKeyboardMarkup(btn)
+    )
+except MessageNotModified:
+    pass
 
 @Client.on_callback_query(filters.regex(r'^shortner_menu'))
 async def shortener_menu_handler(client, query):
@@ -748,19 +769,33 @@ async def change_tutorial(client, query):
     user_id = query.from_user.id if query.from_user else None
     if not await is_check_admin(client, int(grp_id), user_id):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
-    btn = [
-        [InlineKeyboardButton('ᴛᴜᴛᴏʀɪᴀʟ 1', callback_data=f'tutorial_menu#1#{grp_id}')],
-        [InlineKeyboardButton('ᴛᴜᴛᴏʀɪᴀʟ 2', callback_data=f'tutorial_menu#2#{grp_id}')],
-        [InlineKeyboardButton('ᴛᴜᴛᴏʀɪᴀʟ 3', callback_data=f'tutorial_menu#3#{grp_id}')],
-        [InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'verification_setgs#{grp_id}')]
+btn = [
+    [
+        InlineKeyboardButton('1ꜱᴛ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#1#{grp_id}'),
+        InlineKeyboardButton('2ɴᴅ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#2#{grp_id}')
+    ],
+    [
+        InlineKeyboardButton('3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#3#{grp_id}')
+    ],
+    [
+        InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data=f'verification_setgs#{grp_id}')
     ]
+]
     try:
-        await query.message.edit("<b>ᴄʜᴏᴏꜱᴇ ᴛᴜᴛᴏʀɪᴀʟ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b>", reply_markup=InlineKeyboardMarkup(btn))
-    except FloodWait as e:
-        await asyncio.sleep(e.value)
-        await query.message.edit("<b>ᴄʜᴏᴏꜱᴇ ᴛᴜᴛᴏʀɪᴀʟ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b>", reply_markup=InlineKeyboardMarkup(btn))
-    except MessageNotModified:
-        pass
+    await query.message.edit(
+        "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴛᴜᴛᴏʀɪᴀʟꜱ</b>\n"
+        "<b>ꜱᴇʟᴇᴄᴛ ʏᴏᴜʀ 1ꜱᴛ, 2ɴᴅ ᴀɴᴅ 3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ...</b>",
+        reply_markup=InlineKeyboardMarkup(btn)
+    )
+except FloodWait as e:
+    await asyncio.sleep(e.value)
+    await query.message.edit(
+        "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴛᴜᴛᴏʀɪᴀʟꜱ</b>\n"
+        "<b>ꜱᴇʟᴇᴄᴛ ʏᴏᴜʀ 1ꜱᴛ, 2ɴᴅ ᴀɴᴅ 3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ...</b>",
+        reply_markup=InlineKeyboardMarkup(btn)
+    )
+except MessageNotModified:
+    pass
 
 @Client.on_callback_query(filters.regex(r'^tutorial_menu'))
 async def tutorial_menu_handler(client, query):
