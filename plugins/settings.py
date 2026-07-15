@@ -392,10 +392,10 @@ async def change_log(client, query):
     log_channel = settings.get(f'log')
     log_text = f"<code>{log_channel}</code>" if log_channel else "ɴᴏᴛ ꜱᴇᴛ"
     try:
-        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ʟᴏɢ ᴄʜᴀɴɴᴇʟ.\n\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: {log_text}.<b>')
+        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ʟᴏɢ ᴄʜᴀɴɴᴇʟ.\n\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: {log_text}.<b>')
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ʟᴏɢ ᴄʜᴀɴɴᴇʟ.\n\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: {log_text}.<b>')
+        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ʟᴏɢ ᴄʜᴀɴɴᴇʟ.\n\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: {log_text}.<b>')
     except MessageNotModified:
         pass
 
@@ -422,10 +422,10 @@ async def change_log(client, query):
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'log_setgs#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ʟᴏɢ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ✅\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: <code>{log_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ʟᴏɢ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ✅\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: <code>{log_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ʟᴏɢ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ✅\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: <code>{log_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ʟᴏɢ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ✅\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: <code>{log_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -455,10 +455,10 @@ async def change_caption(client, query):
     caption_text = f"<code>{current_caption}</code>" if current_caption else "ɴᴏᴛ ꜱᴇᴛ"
 
     try:
-        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ.\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: {caption_text}.</b>')
+        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ.\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: {caption_text}.</b>')
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ.\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: {caption_text}.</b>')
+        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ.\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: {caption_text}.</b>')
     except MessageNotModified:
         pass
 
@@ -476,10 +476,10 @@ async def change_caption(client, query):
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'caption_setgs#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ✅\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: <code>{caption_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ✅\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: <code>{caption_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ✅\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: <code>{caption_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ✅\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: <code>{caption_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -501,40 +501,40 @@ async def change_shortener(client, query):
     user_id = query.from_user.id if query.from_user else None
     if not await is_check_admin(client, int(grp_id), user_id):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
-btn = [
-    [
-        InlineKeyboardButton('1ꜱᴛ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#1#{grp_id}'),
-        InlineKeyboardButton('2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#2#{grp_id}')
-    ],
-    [
-        InlineKeyboardButton('3ʀᴅ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#3#{grp_id}')
-    ],
-    [
-        InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'verification_setgs#{grp_id}')
+    btn = [
+        [
+            InlineKeyboardButton('1ꜱᴛ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#1#{grp_id}'),
+            InlineKeyboardButton('2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#2#{grp_id}')
+        ],
+        [
+            InlineKeyboardButton('3ʀᴅ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#3#{grp_id}')
+        ],
+        [
+            InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'verification_setgs#{grp_id}')
+        ]
     ]
-]
-text = (
-    "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴠᴇʀɪꜰʏ ᴍᴏᴅᴇ</b>\n"
-    "<b>ꜱᴇᴛ ʏᴏᴜʀ 1ꜱᴛ ᴀɴᴅ 2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ ᴜʀʟ ᴀɴᴅ ᴀᴘɪ...</b>\n\n"
-    "<b>[ᴅᴇꜰᴀᴜʟᴛ] 1ꜱᴛ ꜱʜᴏʀᴛʟɪɴᴋ</b> - <code>indiaearnx.com</code>\n"
-    "<code>b33e4055fe3b0d50a57b3f2d3b108b28b3e97f4</code>\n\n"
-    "<b>[ᴅᴇꜰᴀᴜʟᴛ] 2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ</b> - <code>inshorturl.com</code>\n"
-    "<code>c536241a32ce26d873d4d25f1ca37f38ef45810a</code>"
-)
+    text = (
+        "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴠᴇʀɪꜰʏ ᴍᴏᴅᴇ</b>\n"
+        "<b>ꜱᴇᴛ ʏᴏᴜʀ 1ꜱᴛ ᴀɴᴅ 2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ ᴜʀʟ ᴀɴᴅ ᴀᴘɪ...</b>\n\n"
+        "<b>[ᴅᴇꜰᴀᴜʟᴛ] 1ꜱᴛ ꜱʜᴏʀᴛʟɪɴᴋ</b> - <code>indiaearnx.com</code>\n"
+        "<code>b33e4055fe3b0d50a57b3f2d3b108b28b3e97f4</code>\n\n"
+        "<b>[ᴅᴇꜰᴀᴜʟᴛ] 2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ</b> - <code>inshorturl.com</code>\n"
+        "<code>c536241a32ce26d873d4d25f1ca37f38ef45810a</code>"
+    )
 
-try:
-    await query.message.edit(
-        text,
-        reply_markup=InlineKeyboardMarkup(btn)
-    )
-except FloodWait as e:
-    await asyncio.sleep(e.value)
-    await query.message.edit(
-        text,
-        reply_markup=InlineKeyboardMarkup(btn)
-    )
-except MessageNotModified:
-    pass
+    try:
+        await query.message.edit(
+            text,
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+        await query.message.edit(
+            text,
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+    except MessageNotModified:
+        pass
 
 @Client.on_callback_query(filters.regex(r'^shortner_menu'))
 async def shortener_menu_handler(client, query):
@@ -597,10 +597,10 @@ async def set_shortener(client, query):
     query.data = f'shortner_menu#{shortner_num}#{grp_id}'
 
     try:
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ꜱʜᴏʀᴛɴᴇʀ {shortner_num}:\n🌐 ᴡᴇʙꜱɪᴛᴇ: <code>{current_url}</code>\n🔗 ᴀᴘɪ: <code>{current_api}</code></b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ꜱʜᴏʀᴛɴᴇʀ {shortner_num}:\n🌐 ᴡᴇʙꜱɪᴛᴇ: <code>{current_url}</code>\n🔗 ᴀᴘɪ: <code>{current_api}</code></b>")
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ꜱʜᴏʀᴛɴᴇʀ {shortner_num}:\n🌐 ᴡᴇʙꜱɪᴛᴇ: <code>{current_url}</code>\n🔗 ᴀᴘɪ: <code>{current_api}</code></b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪ· ᴏꜰ ꜱʜᴏʀᴛɴᴇʀ {shortner_num}:\n🌐 ᴡᴇʙꜱɪᴛᴇ: <code>{current_url}</code>\n🔗 ᴀᴘɪ: <code>{current_api}</code></b>")
     except MessageNotModified:
         pass
 
@@ -622,17 +622,17 @@ async def set_shortener(client, query):
     await key_msg.delete()
     await save_group_settings(int(grp_id), f'shortner{suffix}', url_msg.text)
     await save_group_settings(int(grp_id), f'api{suffix}', key_msg.text)
-    log_message = f"#New_Shortner_Set\n\n ꜱʜᴏʀᴛɴᴇʀ ɴᴏ - {shortner_num}\nɢʀᴏᴜᴘ ʟɪɴᴋ - `{invite_link}`\n\nɢʀᴏᴜᴘ ɪᴅ : `{grp_id}`\nᴀᴅᴅᴇᴅ ʙʏ - `{user_id}`\nꜱʜᴏʀᴛɴᴇʀ ꜱɪᴛᴇ - {url_msg.text}\nꜱʜᴏʀᴛɴᴇʀ ᴀᴘɪ - `{key_msg.text}`"
+    log_message = f"#New_Shortner_Set\n\n ꜱʜᴏʀᴛɴᴇʀ ɴᴏ - {shortner_num}\nɢʀᴏᴜᴘ ʟɪɴᴋ - `{invite_link}`\n\nɢʀᴏᴜᴘ ɪᴅ : `{grp_id}`\nᴀᴅᴅᴇᴅ ʙʏ - `{user_id}`\n\nꜱʜᴏʀᴛɴᴇʀ ꜱɪᴛᴇ - {url_msg.text}\nꜱʜᴏʀᴛɴᴇʀ ᴀᴘɪ - `{key_msg.text}`"
     await client.send_message(LOG_API_CHANNEL, log_message, disable_web_page_preview=True)
 
     btn = [
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'shortner_menu#{shortner_num}#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ꜱʜᴏʀᴛɴᴇʀ {shortner_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴡᴇʙꜱɪᴛᴇ: <code>{url_msg.text}</code>\nᴀᴘɪ: <code>{key_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ꜱʜᴏʀᴛɴᴇʀ {shortner_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴡᴇʙꜱɪᴛᴇ: <code>{url_msg.text}</code>\nᴀᴘɪ: <code>{key_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ꜱʜᴏʀᴛɴᴇʀ {shortner_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴡᴇʙꜱɪᴛᴇ: <code>{url_msg.text}</code>\nᴀᴘɪ: <code>{key_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ꜱʜᴏʀᴛɴᴇʀ {shortner_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴡᴇʙꜱɪᴛᴇ: <code>{url_msg.text}</code>\nᴀᴘɪ: <code>{key_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -648,10 +648,10 @@ async def change_time(client, query):
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'verification_setgs#{grp_id}')]
     ]
     try:
-        await query.message.edit("<b>ᴄʜᴏᴏꜱᴇ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit("<b><b>ᴄʜᴏᴏꜱᴇ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b></b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit("<b>ᴄʜᴏᴏꜱᴇ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit("<b><b>ᴄʜᴏᴏꜱᴇ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b></b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -663,7 +663,6 @@ async def time_menu_handler(client, query):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
 
     settings = await get_settings(int(grp_id))
-    # Mapping: 1->verify_time (old 2nd), 2->third_verify_time (old 3rd)
     if num == "1":
         key = "verify_time"
     elif num == "2":
@@ -732,14 +731,14 @@ async def set_time(client, query):
     query.data = f'time_menu#{time_num}#{grp_id}'
 
     try:
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ {time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ:\n\n⏱️ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {current_time}</b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ {time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ:\n\n⏱️ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {current_time}</b>")
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ {time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ:\n\n⏱️ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {current_time}</b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ {time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ:\n\n⏱️ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {current_time}</b>")
     except MessageNotModified:
         pass
 
-    m = await query.message.reply("<b>ꜱᴇɴᴅ ɴᴇᴡ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ (ɪɴ sᴇᴄᴏɴᴅs) ᴏʀ ᴜꜱᴇ <code>/cancel</code> ᴛᴏ ᴄᴀɴᴄᴇʟ ᴛʜᴇ ᴘʀᴏᴄᴇꜱꜱ.</b>")
+    m = await query.message.reply("<b><b>ꜱᴇɴᴅ ɴᴇᴡ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ (ɪɴ sᴇᴄᴏɴᴅs) ᴏʀ ᴜꜱᴇ <code>/cancel</code> ᴛᴏ ᴄᴀɴᴄᴇʟ ᴛʜᴇ ᴘʀᴏᴄᴇꜱꜱ.</b></b>")
     while True:
         time_msg = await client.listen(chat_id=query.message.chat.id, user_id=user_id)
         if time_msg.text == "/cancel":
@@ -753,17 +752,17 @@ async def set_time(client, query):
     await m.delete()
     await time_msg.delete()
     await save_group_settings(int(grp_id), key, int(time_msg.text))
-    log_message = f"#New_Time_Set\n\n ᴛɪᴍᴇ ɴᴏ - {time_num}\nɢʀᴏᴜᴘ ʟɪɴᴋ - `{invite_link}`\n\nɢʀᴏᴜᴘ ɪᴅ : `{grp_id}`\nᴀᴅᴅᴇᴅ ʙʏ - `{user_id}`\nᴛɪᴍᴇ - {time_msg.text}"
+    log_message = f"#New_Time_Set\n\n ᴛɪᴍᴇ ɴᴏ - {time_num}\nɢʀᴏᴜᴘ ʟɪɴᴋ - `{invite_link}`\n\nɢʀᴏᴜᴘ ɪᴅ : `{grp_id}`\nᴀ尋ᴅᴇᴅ ʙʏ - `{user_id}`\nᴛɪᴍᴇ - {time_msg.text}"
     await client.send_message(LOG_API_CHANNEL, log_message, disable_web_page_preview=True)
 
     btn = [
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'time_menu#{time_num}#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>{time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴜᴘᴅᴀᴛᴇ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ✅\n\nᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {time_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>{time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴜᴘᴅᴀᴛᴇ ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ✅\n\nᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {time_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>{time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴜᴘᴅᴀᴛᴇ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ✅\n\nᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {time_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>{time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴜᴘᴅᴀᴛᴇ ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ✅\n\nᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {time_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -774,33 +773,33 @@ async def change_tutorial(client, query):
     if not await is_check_admin(client, int(grp_id), user_id):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
     btn = [
-    [
-        InlineKeyboardButton('1ꜱᴛ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#1#{grp_id}'),
-        InlineKeyboardButton('2ɴᴅ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#2#{grp_id}')
-    ],
-    [
-        InlineKeyboardButton('3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#3#{grp_id}')
-    ],
-    [
-        InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'verification_setgs#{grp_id}')
-    ]
+        [
+            InlineKeyboardButton('1ꜱᴛ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#1#{grp_id}'),
+            InlineKeyboardButton('2ɴᴅ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#2#{grp_id}')
+        ],
+        [
+            InlineKeyboardButton('3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#3#{grp_id}')
+        ],
+        [
+            InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'verification_setgs#{grp_id}')
+        ]
     ]
 
     try:
-    await query.message.edit(
-        "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴛᴜᴛᴏʀɪᴀʟꜱ</b>\n"
-        "<b>ꜱᴇʟᴇᴄᴛ ʏᴏᴜʀ 1ꜱᴛ, 2ɴᴅ ᴀɴᴅ 3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ...</b>",
-        reply_markup=InlineKeyboardMarkup(btn)
-    )
+        await query.message.edit(
+            "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴛᴜᴛᴏʀɪᴀʟꜱ</b>\n"
+            "<b>ꜱᴇʟᴇᴄᴛ ʏᴏᴜʀ 1ꜱᴛ, 2ɴᴅ ᴀɴᴅ 3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ...</b>",
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
     except FloodWait as e:
-    await asyncio.sleep(e.value)
-    await query.message.edit(
-        "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴛᴜᴛᴏʀɪᴀʟꜱ</b>\n"
-        "<b>ꜱᴇʟᴇᴄᴛ ʏᴏᴜʀ 1ꜱᴛ, 2ɴᴅ ᴀɴᴅ 3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ...</b>",
-        reply_markup=InlineKeyboardMarkup(btn)
-    )
-except MessageNotModified:
-    pass
+        await asyncio.sleep(e.value)
+        await query.message.edit(
+            "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴛᴜᴛᴏʀɪᴀʟꜱ</b>\n"
+            "<b>ꜱᴇʟᴇᴄᴛ ʏᴏᴜʀ 1ꜱᴛ, 2ɴᴅ ᴀɴᴅ 3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ...</b>",
+            reply_markup=InlineKeyboardMarkup(btn)
+        )
+    except MessageNotModified:
+        pass
 
 @Client.on_callback_query(filters.regex(r'^tutorial_menu'))
 async def tutorial_menu_handler(client, query):
@@ -860,10 +859,10 @@ async def set_tutorial(client, query):
     query.data = f'tutorial_menu#{tutorial_num}#{grp_id}'
 
     try:
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num}:\n\n🔗 ᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_url}.</b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num}:\n\n🔗 ᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_url}.</b>")
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num}:\n\n🔗 ᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_url}.</b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num}:\n\n🔗 ᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_url}.</b>")
     except MessageNotModified:
         pass
 
@@ -883,10 +882,10 @@ async def set_tutorial(client, query):
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'tutorial_menu#{tutorial_num}#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -935,7 +934,7 @@ async def delete_group_check_callback(client, query):
             ]
         ]
         await query.message.edit_text(
-            "<b>⚠️ ᴀʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ᴅᴇʟᴇᴛᴇ ᴛʜɪs ɢʀᴏᴜᴘ ꜰʀᴏᴍ ᴅᴀᴛᴀʙᴀsᴇ? ᴛʜᴇ ʙᴏᴛ ᴡɪʟʟ ᴀʟsᴏ ʟᴇᴀᴠᴇ ᴛʜᴇ ɢʀᴏᴜᴘ.</b>",
+            "<b>⚠️ ᴀʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ᴅᴇʟᴇᴛᴇ ᴛʜɪs ɢʀᴏᴜᴘ ꜰʀᴏᴍ ᴅᴀᴛᴀʙᴀsᴇ? ᴛʜᴇ ʙᴏᴛ ᴡɪʟ· ᴀʟsᴏ ʟᴇᴀᴠᴇ ᴛʜᴇ ɢʀᴏᴜᴘ.</b>",
             reply_markup=InlineKeyboardMarkup(buttons),
             parse_mode=enums.ParseMode.HTML
         )
@@ -957,7 +956,7 @@ async def delete_group_callback(client, query):
             await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
             return
         await db.delete_chat(int(grp_id))
-        await query.answer("ɢʀᴏᴜᴘ ᴅᴇʟᴇᴛᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ✅", show_alert=True)
+        await query.answer("ɢʀᴏᴜᴘ ᴅᴇʟᴇᴛᴇᴅ ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ✅", show_alert=True)
         await query.message.edit_text("<b>✅ ɢʀᴏᴜᴘ ᴅᴇʟᴇᴛᴇᴅ ꜰʀᴏᴍ ᴅᴀᴛᴀʙᴀsᴇ ᴀɴᴅ ʙᴏᴛ ʟᴇꜰᴛ ᴛʜᴇ ɢʀᴏᴜᴘ.</b>")
         try:
             await client.leave_chat(int(grp_id))
