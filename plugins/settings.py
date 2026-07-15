@@ -6,6 +6,17 @@ from info import *
 from utils import get_settings, save_group_settings, delete_group_setting, MAX_B_TN, temp, is_check_admin
 from Script import script
 from logging_helper import LOGGER
+from database.users_chats_db import db
+
+async def get_invite_link(client, grp_id):
+    try:
+        return await client.export_chat_invite_link(int(grp_id))
+    except Exception:
+        try:
+            chat = await client.get_chat(int(grp_id))
+            return chat.invite_link or "None"
+        except Exception:
+            return "None"
 
 async def group_setting_buttons(grp_id):
     settings = await get_settings(grp_id)
@@ -70,7 +81,7 @@ async def open_settings_group(client, query):
     if (
             st.status != enums.ChatMemberStatus.ADMINISTRATOR
             and st.status != enums.ChatMemberStatus.OWNER
-            and str(userid) not in ADMINS
+            and userid not in ADMINS
     ):
         await query.answer("ʏᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ʀɪɢʜᴛꜱ ᴛᴏ ᴅᴏ ᴛʜɪꜱ !", show_alert=True)
         return
@@ -103,7 +114,7 @@ async def open_settings_pm(client, query):
     if (
             st.status != enums.ChatMemberStatus.ADMINISTRATOR
             and st.status != enums.ChatMemberStatus.OWNER
-            and str(userid) not in ADMINS
+            and userid not in ADMINS
     ):
         await query.answer("ʏᴏᴜ ᴅᴏɴ'ᴛ ʜᴀᴠᴇ ꜱᴜꜰꜰɪᴄɪᴀɴᴛ ʀɪɢʜᴛꜱ ᴛᴏ ᴅᴏ ᴛʜɪꜱ !", show_alert=True)
         return
@@ -178,12 +189,12 @@ async def verification_settings(client, query):
     ]]
 
     text = (
-    "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
-    "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ꜱʜᴏʀᴛʟɪɴᴋꜱ ᴀɴᴅ\n"
-    "ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
-    "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
-    f"✅ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ : {verify_text}</b>"
-)
+        "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+        "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ꜱʜᴏʀᴛʟɪɴᴋꜱ ᴀɴᴅ\n"
+        "ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
+        "<b>ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
+        f"✅ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ : {verify_text}</b>"
+    )
 
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
@@ -205,19 +216,19 @@ async def log_settings(client, query):
     log_text = f"<code>{log_channel}</code>" if log_channel else "ɴᴏᴛ ꜱᴇᴛ"
 
     btn = [[
-        InlineKeyboardButton('ᴄʜᴀɴɢᴇ ʟᴏɢ', callback_data=f'changelog#{grp_id}'),
-        InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ ʟᴏɢ', callback_data=f'removelog#{grp_id}'),
+        InlineKeyboardButton('... ᴄʜᴀɴɢᴇ ʟᴏɢ ...', callback_data=f'changelog#{grp_id}'),
+        InlineKeyboardButton('... ʀᴇᴍᴏᴠᴇ ʟᴏɢ ...', callback_data=f'removelog#{grp_id}'),
     ],[
         InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'grp_pm#{grp_id}')
     ]]
 
     text = (
-    "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
-    "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ʟᴏɢ ᴄʜᴀɴɴᴇʟ\n"
-    "ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
-    "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
-    f"📝 ʟᴏɢ ᴄʜᴀɴɴᴇʟ : {log_text}</b>"
-)
+        "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+        "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ʟᴏɢ ᴄʜᴀɴɴᴇʟ\n"
+        "ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
+        "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
+        f"📝 ʟᴏɢ ᴄʜᴀɴɴᴇʟ : {log_text}</b>"
+    )
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
@@ -243,19 +254,19 @@ async def fsub_settings(client, query):
          fsub_text = "ɴᴏᴛ ꜱᴇᴛ"
 
     btn = [[
-        InlineKeyboardButton('ꜱᴇᴛ ꜰꜱᴜʙ', callback_data=f'set_fsub_ui#{grp_id}'),
-        InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ ꜰꜱᴜʙ', callback_data=f'remove_fsub_ui#{grp_id}'),
+        InlineKeyboardButton('... ꜱᴇᴛ ꜰꜱᴜʙ ...', callback_data=f'set_fsub_ui#{grp_id}'),
+        InlineKeyboardButton('... ʀᴇᴍᴏᴠᴇ ꜰꜱᴜʙ ...', callback_data=f'remove_fsub_ui#{grp_id}'),
     ],[
-        InlineKeyboardButton('>>ʙᴀᴄᴋ', callback_data=f'grp_pm#{grp_id}')
+        InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'grp_pm#{grp_id}')
     ]]
 
     text = (
-    "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
-    "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ꜰꜱᴜʙ ᴄʜᴀɴɴᴇʟ\n"
-    "ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
-    "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
-    f"🚫 ꜰꜱᴜʙ ᴄʜᴀɴɴᴇʟ :\n{fsub_text}</b>"
-)
+        "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+        "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ꜰꜱᴜʙ ᴄʜᴀɴɴᴇʟ\n"
+        "ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
+        "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
+        f"🚫 ꜰꜱᴜʙ ᴄʜᴀɴɴᴇʟ :\n{fsub_text}</b>"
+    )
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
@@ -276,19 +287,19 @@ async def caption_settings(client, query):
     caption_text = f"<code>{caption}</code>" if caption else "ɴᴏᴛ ꜱᴇᴛ"
 
     btn = [[
-        InlineKeyboardButton('ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ', callback_data=f'changecaption#{grp_id}'),
-        InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ ᴄᴀᴘᴛɪᴏɴ', callback_data=f'removecaption#{grp_id}'),
+        InlineKeyboardButton('... ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ...', callback_data=f'changecaption#{grp_id}'),
+        InlineKeyboardButton('... ʀᴇᴍᴏᴠᴇ ᴄᴀᴘᴛɪᴏɴ ...', callback_data=f'removecaption#{grp_id}'),
     ],[
         InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'grp_pm#{grp_id}')
     ]]
 
     text = (
-    "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
-    "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴄᴜꜱᴛᴏᴍ\n"
-    "ᴄᴀᴘᴛɪᴏɴ ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
-    "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
-    f"📂 ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ : {caption_text}</b>"
-)
+        "<b>⚙️ ᴀᴅᴠᴀɴᴄᴇᴅ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
+        "ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴄᴜꜱᴛᴏᴍ\n"
+        "ᴄᴀᴘᴛɪᴏɴ ꜱᴇᴛᴛɪɴɢꜱ ꜰʀᴏᴍ ʜᴇʀᴇ.\n\n"
+        "ꜱᴇʟᴇᴄᴛ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ 👇\n\n"
+        f"📂 ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ : {caption_text}</b>"
+    )
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
@@ -384,10 +395,10 @@ async def remove_fsub_ui(client, query):
 async def change_log(client, query):
     grp_id = query.data.split("#")[1]
     user_id = query.from_user.id if query.from_user else None
-    silentx = await client.get_chat(int(grp_id))
-    invite_link = await client.export_chat_invite_link(grp_id)
     if not await is_check_admin(client, int(grp_id), user_id):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
+    silentx = await client.get_chat(int(grp_id))
+    invite_link = await get_invite_link(client, grp_id)
     settings = await get_settings(int(grp_id))
     log_channel = settings.get(f'log')
     log_text = f"<code>{log_channel}</code>" if log_channel else "ɴᴏᴛ ꜱᴇᴛ"
@@ -422,10 +433,10 @@ async def change_log(client, query):
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'log_setgs#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ʟᴏɢ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ✅\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: <code>{log_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b><b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ʟᴏɢ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ✅\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: <code>{log_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ʟᴏɢ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ✅\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: <code>{log_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b><b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ʟᴏɢ ᴄʜᴀɴɴᴇʟ ᴠᴀʟᴜᴇ ✅\nʟᴏɢ ᴄʜᴀɴɴᴇʟ: <code>{log_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -437,28 +448,26 @@ async def remove_caption(client, query):
         return await query.answer("ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.", show_alert=True)
     await delete_group_setting(int(grp_id), 'caption')
     await query.answer("ᴄᴀᴘᴛɪᴏɴ ʀᴇᴍᴏᴠᴇᴅ!", show_alert=True)
-
-    # Redirect back to caption settings
     await caption_settings(client, query)
 
 @Client.on_callback_query(filters.regex(r'^changecaption'))
 async def change_caption(client, query):
     grp_id = query.data.split("#")[1]
     user_id = query.from_user.id if query.from_user else None
-    silentx = await client.get_chat(int(grp_id))
-    invite_link = await client.export_chat_invite_link(grp_id)
-    title = silentx.title
     if not await is_check_admin(client, int(grp_id), user_id):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
+    silentx = await client.get_chat(int(grp_id))
+    invite_link = await get_invite_link(client, grp_id)
+    title = silentx.title
     settings = await get_settings(int(grp_id))
     current_caption = settings.get(f'caption')
     caption_text = f"<code>{current_caption}</code>" if current_caption else "ɴᴏᴛ ꜱᴇᴛ"
 
     try:
-        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ.\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: {caption_text}.</b>')
+        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ.\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: {caption_text}.</b>')
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ.\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: {caption_text}.</b>')
+        await query.message.edit(f'<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ.\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: {caption_text}.</b>')
     except MessageNotModified:
         pass
 
@@ -476,10 +485,10 @@ async def change_caption(client, query):
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'caption_setgs#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ✅\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: <code>{caption_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ✅\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: <code>{caption_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ✅\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: <code>{caption_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b><b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ ᴠᴀʟᴜᴇꜱ ✅\n\nᴄᴜꜱᴛᴏᴍ ᴄᴀᴘᴛɪᴏɴ: <code>{caption_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -491,8 +500,7 @@ async def toggle_verify(client, query):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
     new_status = not (status == "True")
     await save_group_settings(int(grp_id), set_type, new_status)
-
-    # Reload verification settings menu
+    await query.answer("ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ꜱᴛᴀᴛᴜꜱ ᴄʜᴀɴɢᴇchanged ✅")
     await verification_settings(client, query)
 
 @Client.on_callback_query(filters.regex(r'^changeshortner'))
@@ -500,7 +508,7 @@ async def change_shortener(client, query):
     _, grp_id = query.data.split("#")
     user_id = query.from_user.id if query.from_user else None
     if not await is_check_admin(client, int(grp_id), user_id):
-        return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
+        return await query.answer("<b><b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
     btn = [
         [
             InlineKeyboardButton('1ꜱᴛ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'shortner_menu#1#{grp_id}'),
@@ -515,24 +523,17 @@ async def change_shortener(client, query):
     ]
     text = (
         "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴠᴇʀɪꜰʏ ᴍᴏᴅᴇ</b>\n"
-        "<b>ꜱᴇᴛ ʏᴏᴜʀ 1ꜱᴛ ᴀɴᴅ 2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ ᴜʀʟ ᴀɴᴅ ᴀᴘɪ...</b>\n\n"
+        "<b><b>ꜱᴇᴛ ʏᴏᴜʀ 1ꜱᴛ ᴀɴᴅ 2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ ᴜʀʟ ᴀɴᴅ ᴀᴘɪ...</b>\n\n"
         "<b>[ᴅᴇꜰᴀᴜʟᴛ] 1ꜱᴛ ꜱʜᴏʀᴛʟɪɴᴋ</b> - <code>indiaearnx.com</code>\n"
         "<code>b33e4055fe3b0d50a57b3f2d3b108b28b3e97f4</code>\n\n"
         "<b>[ᴅᴇꜰᴀᴜʟᴛ] 2ɴᴅ ꜱʜᴏʀᴛʟɪɴᴋ</b> - <code>inshorturl.com</code>\n"
         "<code>c536241a32ce26d873d4d25f1ca37f38ef45810a</code>"
     )
-
     try:
-        await query.message.edit(
-            text,
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
+        await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(
-            text,
-            reply_markup=InlineKeyboardMarkup(btn)
-        )
+        await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -548,13 +549,10 @@ async def shortener_menu_handler(client, query):
     current_url = settings.get(f'shortner{suffix}')
     current_api = settings.get(f'api{suffix}')
 
-    text = f"<b>ꜱʜᴏʀᴛᴇɴᴇʀ {num} ꜱᴇᴛᴛɪɴɢꜱ:</b>\n\n🌐 ᴅᴏᴍᴀɪɴ: {current_url or 'ɴᴏᴛ ꜱᴇᴛ'}\n🔗 ᴀᴘɪ: {current_api or 'ɴᴏᴛ ꜱᴇᴛ'}"
-
-    set_text = "ꜱᴇᴛ"
-
+    text = f"<b>ꜱʜᴏʀᴛᴇɴᴇʀ {num} ꜱᴇᴛᴛɪɴɢꜱ:</b>\n\n🌐 ᴅᴏᴍᴀɪɴ: {current_url or 'ᴏᴛ ꜱᴇᴛ'}\n🔗 ᴀᴘɪ: {current_api or 'ɴᴏᴛ ꜱᴇᴛ'}"
     btn = [
-        [InlineKeyboardButton(set_text, callback_data=f'set_verify{num}#{grp_id}')],
-        [InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ', callback_data=f'rm_verify{num}#{grp_id}')],
+        [InlineKeyboardButton("ꜱᴇᴛ", callback_data=f'set_verify{num}#{grp_id}')],
+        [InlineKeyboardButton('ᴇᴍᴏᴠᴇ', callback_data=f'rm_verify{num}#{grp_id}')],
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'changeshortner#{grp_id}')]
     ]
     try:
@@ -584,23 +582,22 @@ async def set_shortener(client, query):
     shortner_num = query.data.split("#")[0][-1]
     grp_id = query.data.split("#")[1]
     user_id = query.from_user.id if query.from_user else None
-    silentx = await client.get_chat(int(grp_id))
-    invite_link = await client.export_chat_invite_link(grp_id)
     if not await is_check_admin(client, int(grp_id), user_id):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
+    silentx = await client.get_chat(int(grp_id))
+    invite_link = await get_invite_link(client, grp_id)
     settings = await get_settings(int(grp_id))
     suffix = "" if shortner_num == "1" else f"_{'two' if shortner_num == '2' else 'three'}"
     current_url = settings.get(f'shortner{suffix}', "ʏᴏᴜ ᴅɪᴅɴ'ᴛ ꜱᴇᴛ ᴀɴᴅ ᴠᴀʟᴜᴇ ꜱᴏ ᴜꜱɪɴɢ ᴅᴇꜰᴀᴜʟᴛ ᴠᴀʟᴜᴇꜱ")
     current_api = settings.get(f'api{suffix}', "ʏᴏᴜ ᴅɪᴅɴ'ᴛ ꜱᴇᴛ ᴀɴᴅ ᴠᴀʟᴜᴇ ꜱᴏ ᴜꜱɪɴɢ ᴅᴇꜰᴀᴜʟᴛ ᴠᴀʟᴜᴇꜱ")
 
-    # Set query.data for back handling
     query.data = f'shortner_menu#{shortner_num}#{grp_id}'
 
     try:
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ꜱʜᴏʀᴛɴᴇʀ {shortner_num}:\n🌐 ᴡᴇʙꜱɪᴛᴇ: <code>{current_url}</code>\n🔗 ᴀᴘɪ: <code>{current_api}</code></b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ꜱʜᴏʀᴛɴᴇʀ {shortner_num}:\n🌐 ᴡᴇʙꜱɪᴛᴇ: <code>{current_url}</code>\n🔗 ᴀᴘɪ: <code>{current_api}</code></b>")
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪ· ᴏꜰ ꜱʜᴏʀᴛɴᴇʀ {shortner_num}:\n🌐 ᴡᴇʙꜱɪᴛᴇ: <code>{current_url}</code>\n🔗 ᴀᴘɪ: <code>{current_api}</code></b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ꜱʜᴏʀᴛɴᴇʀ {shortner_num}:\n🌐 ᴡᴇʙꜱɪᴛᴇ: <code>{current_url}</code>\n🔗 ᴀᴘɪ: <code>{current_api}</code></b>")
     except MessageNotModified:
         pass
 
@@ -622,17 +619,17 @@ async def set_shortener(client, query):
     await key_msg.delete()
     await save_group_settings(int(grp_id), f'shortner{suffix}', url_msg.text)
     await save_group_settings(int(grp_id), f'api{suffix}', key_msg.text)
-    log_message = f"#New_Shortner_Set\n\n ꜱʜᴏʀᴛɴᴇʀ ɴᴏ - {shortner_num}\nɢʀᴏᴜᴘ ʟɪɴᴋ - `{invite_link}`\n\nɢʀᴏᴜᴘ ɪᴅ : `{grp_id}`\nᴀᴅᴅᴇᴅ ʙʏ - `{user_id}`\n\nꜱʜᴏʀᴛɴᴇʀ ꜱɪᴛᴇ - {url_msg.text}\nꜱʜᴏʀᴛɴᴇʀ ᴀᴘɪ - `{key_msg.text}`"
+    log_message = f"#New_Shortner_Set\n\n ꜱʜᴏʀᴛɴᴇʀ ɴᴏ - {shortner_num}\nɢʀᴏᴜᴘ ʟɪɴᴋ - `{invite_link}`\n\nɢʀᴏᴜᴘ ɪᴅ : `{grp_id}`\nᴀᴅᴅᴇᴅ ʙʏ - `{user_id}`\nꜱʜᴏʀᴛɴᴇʀ ꜱɪᴛᴇ - {url_msg.text}\nꜱʜᴏʀᴛɴᴇʀ ᴀᴘɪ - `{key_msg.text}`"
     await client.send_message(LOG_API_CHANNEL, log_message, disable_web_page_preview=True)
 
     btn = [
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'shortner_menu#{shortner_num}#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ꜱʜᴏʀᴛɴᴇʀ {shortner_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴡᴇʙꜱɪᴛᴇ: <code>{url_msg.text}</code>\nᴀᴘɪ: <code>{key_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ꜱʜᴏʀᴛɴᴇʀ {shortner_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴡᴇʙꜱɪᴛᴇ: <code>{url_msg.text}</code>\nᴀᴘɪ: <code>{key_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ꜱʜᴏʀᴛɴᴇʀ {shortner_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴡᴇʙꜱɪᴛᴇ: <code>{url_msg.text}</code>\nᴀᴘɪ: <code>{key_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ꜱʜᴏʀᴛɴᴇʀ {shortner_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴡᴇʙꜱɪᴛᴇ: <code>{url_msg.text}</code>\nᴀᴘɪ: <code>{key_msg.text}</code></b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -641,17 +638,17 @@ async def change_time(client, query):
     _, grp_id = query.data.split("#")
     user_id = query.from_user.id if query.from_user else None
     if not await is_check_admin(client, int(grp_id), user_id):
-        return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
+        return await query.answer("<b><b>ⴝᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
     btn = [
         [InlineKeyboardButton('ᴛɪᴍᴇ 1', callback_data=f'time_menu#1#{grp_id}')],
         [InlineKeyboardButton('ᴛɪᴍᴇ 2', callback_data=f'time_menu#2#{grp_id}')],
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'verification_setgs#{grp_id}')]
     ]
     try:
-        await query.message.edit("<b><b>ᴄʜᴏᴏꜱᴇ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit("<b>ᴄʜᴏᴏꜱᴇ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit("<b><b>ᴄʜᴏᴏꜱᴇ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b></b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit("<b>ᴄʜᴏᴏꜱᴇ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴛᴏ ᴍᴀɴᴀɢᴇ:</b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -671,10 +668,8 @@ async def time_menu_handler(client, query):
         return await query.answer("Invalid Time Selection")
 
     val = settings.get(key)
-    set_text = "ꜱᴇᴛ"
-
     btn = [
-        [InlineKeyboardButton(set_text, callback_data=f'set_time{num}#{grp_id}')],
+        [InlineKeyboardButton("ꜱᴇᴛ", callback_data=f'set_time{num}#{grp_id}')],
         [InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ', callback_data=f'rm_time{num}#{grp_id}')],
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'changetime#{grp_id}')]
     ]
@@ -703,7 +698,6 @@ async def remove_time(client, query):
 
     await delete_group_setting(int(grp_id), key)
     await query.answer(f"ᴛɪᴍᴇ {time_num} ʀᴇᴍᴏᴠᴇᴅ!", show_alert=True)
-
     query.data = f'time_menu#{time_num}#{grp_id}'
     await time_menu_handler(client, query)
 
@@ -712,10 +706,10 @@ async def set_time(client, query):
     time_num = query.data.split("#")[0][-1]
     grp_id = query.data.split("#")[1]
     user_id = query.from_user.id if query.from_user else None
-    silentx = await client.get_chat(int(grp_id))
-    invite_link = await client.export_chat_invite_link(grp_id)
     if not await is_check_admin(client, int(grp_id), user_id):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
+    silentx = await client.get_chat(int(grp_id))
+    invite_link = await get_invite_link(client, grp_id)
 
     settings = await get_settings(int(grp_id))
     if time_num == "1":
@@ -726,19 +720,17 @@ async def set_time(client, query):
         return await query.answer("Invalid Time Selection")
 
     current_time = settings.get(key, 'Not set')
-
-    # Set query.data for back handling
     query.data = f'time_menu#{time_num}#{grp_id}'
 
     try:
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ {time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ:\n\n⏱️ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {current_time}</b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ {time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ:\n\n⏱️ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {current_time}</b>")
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ {time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ:\n\n⏱️ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {current_time}</b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ {time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ:\n\n⏱️ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {current_time}</b>")
     except MessageNotModified:
         pass
 
-    m = await query.message.reply("<b><b>ꜱᴇɴᴅ ɴᴇᴡ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ (ɪɴ sᴇᴄᴏɴᴅs) ᴏʀ ᴜꜱᴇ <code>/cancel</code> ᴛᴏ ᴄᴀɴᴄᴇʟ ᴛʜᴇ ᴘʀᴏᴄᴇꜱꜱ.</b></b>")
+    m = await query.message.reply("<b>ꜱᴇɴᴅ ɴᴇᴡ ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ (ɪɴ sᴇᴄᴏɴᴅs) ᴏʀ ᴜꜱᴇ <code>/cancel</code> ᴛᴏ ᴄᴀɴᴄᴇʟ ᴛʜᴇ ᴘʀᴏᴄᴇꜱꜱ.</b>")
     while True:
         time_msg = await client.listen(chat_id=query.message.chat.id, user_id=user_id)
         if time_msg.text == "/cancel":
@@ -752,17 +744,17 @@ async def set_time(client, query):
     await m.delete()
     await time_msg.delete()
     await save_group_settings(int(grp_id), key, int(time_msg.text))
-    log_message = f"#New_Time_Set\n\n ᴛɪᴍᴇ ɴᴏ - {time_num}\nɢʀᴏᴜᴘ ʟɪɴᴋ - `{invite_link}`\n\nɢʀᴏᴜᴘ ɪᴅ : `{grp_id}`\nᴀ尋ᴅᴇᴅ ʙʏ - `{user_id}`\nᴛɪᴍᴇ - {time_msg.text}"
+    log_message = f"#New_Time_Set\n\n ᴛɪᴍᴇ ɴᴏ - {time_num}\nɢʀᴏᴜᴘ ʟɪɴᴋ - `{invite_link}`\n\nɢʀᴏᴜᴘ ɪᴅ : `{grp_id}`\nᴀᴅᴅᴇᴅ ʙʏ - `{user_id}`\nᴛɪᴍᴇ - {time_msg.text}"
     await client.send_message(LOG_API_CHANNEL, log_message, disable_web_page_preview=True)
 
     btn = [
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'time_menu#{time_num}#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>{time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴜᴘᴅᴀᴛᴇ ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ✅\n\nᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {time_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>{time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴜᴘᴅᴀᴛᴇ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ✅\n\nᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {time_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>{time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴜᴘᴅᴀᴛᴇ ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ✅\n\nᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {time_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>{time_num} ᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ ᴜᴘᴅᴀᴛᴇ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ✅\n\nᴠᴇʀɪꜰɪᴄᴀᴛɪᴏɴ ᴛɪᴍᴇ: {time_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -771,7 +763,7 @@ async def change_tutorial(client, query):
     _, grp_id = query.data.split("#")
     user_id = query.from_user.id if query.from_user else None
     if not await is_check_admin(client, int(grp_id), user_id):
-        return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
+        return await query.answer("<b>ᴍᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
     btn = [
         [
             InlineKeyboardButton('1ꜱᴛ ᴛᴜᴛᴏʀɪᴀʟ', callback_data=f'tutorial_menu#1#{grp_id}'),
@@ -795,7 +787,7 @@ async def change_tutorial(client, query):
         await asyncio.sleep(e.value)
         await query.message.edit(
             "<b>ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴛᴜᴛᴏʀɪᴀʟꜱ</b>\n"
-            "<b>ꜱᴇʟᴇᴄᴛ ʏᴏᴜʀ 1ꜱᴛ, 2ɴᴅ ᴀɴᴅ 3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ...</b>",
+            "<b><b>ꜱᴇʟᴇᴄᴛ ʏᴏᴜʀ 1ꜱᴛ, 2ɴᴅ ᴀɴᴅ 3ʀᴅ ᴛᴜᴛᴏʀɪᴀʟ...</b>",
             reply_markup=InlineKeyboardMarkup(btn)
         )
     except MessageNotModified:
@@ -811,10 +803,9 @@ async def tutorial_menu_handler(client, query):
     settings = await get_settings(int(grp_id))
     suffix = "" if num == "1" else f"_{'2' if num == '2' else '3'}"
     val = settings.get(f'tutorial{suffix}')
-    set_text = "ꜱᴇᴛ"
 
     btn = [
-        [InlineKeyboardButton(set_text, callback_data=f'set_tutorial{num}#{grp_id}')],
+        [InlineKeyboardButton("<b>ꜱᴇᴛ</b>", callback_data=f'set_tutorial{num}#{grp_id}')],
         [InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ', callback_data=f'rm_tutorial{num}#{grp_id}')],
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'changetutorial#{grp_id}')]
     ]
@@ -835,10 +826,8 @@ async def remove_tutorial(client, query):
         return await query.answer("ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.", show_alert=True)
 
     suffix = "" if tutorial_num == "1" else f"_{'2' if tutorial_num == '2' else '3'}"
-
     await delete_group_setting(int(grp_id), f'tutorial{suffix}')
     await query.answer(f"ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ʀᴇᴍᴏᴠᴇᴅ!", show_alert=True)
-
     query.data = f'tutorial_menu#{tutorial_num}#{grp_id}'
     await tutorial_menu_handler(client, query)
 
@@ -847,22 +836,21 @@ async def set_tutorial(client, query):
     tutorial_num = query.data.split("#")[0][-1]
     grp_id = query.data.split("#")[1]
     user_id = query.from_user.id if query.from_user else None
-    silentx = await client.get_chat(int(grp_id))
-    invite_link = await client.export_chat_invite_link(grp_id)
     if not await is_check_admin(client, int(grp_id), user_id):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
+    silentx = await client.get_chat(int(grp_id))
+    invite_link = await get_invite_link(client, grp_id)
     settings = await get_settings(int(grp_id))
     suffix = "" if tutorial_num == "1" else f"_{'2' if tutorial_num == '2' else '3'}"
     tutorial_url = settings.get(f'tutorial{suffix}', "ʏᴏᴜ ᴅɪᴅɴ'ᴛ ꜱᴇᴛ ᴀɴᴅ ᴠᴀʟᴜᴇ ꜱᴏ ᴜꜱɪɴɢ ᴅᴇꜰᴀᴜʟᴛ ᴠᴀʟᴜᴇꜱ")
 
-    # Set query.data for back handling
     query.data = f'tutorial_menu#{tutorial_num}#{grp_id}'
 
     try:
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num}:\n\n🔗 ᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_url}.</b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num}:\n\n🔗 ᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_url}.</b>")
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟ ᴏꜰ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num}:\n\n🔗 ᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_url}.</b>")
+        await query.message.edit(f"<b>📌 ᴅᴇᴛᴀɪʟꜱ ᴏꜰ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num}:\n\n🔗 ᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_url}.</b>")
     except MessageNotModified:
         pass
 
@@ -882,10 +870,10 @@ async def set_tutorial(client, query):
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'tutorial_menu#{tutorial_num}#{grp_id}')]
     ]
     try:
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
     except FloodWait as e:
         await asyncio.sleep(e.value)
-        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
+        await query.message.edit(f"<b>ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴜᴘᴅᴀᴛᴇᴅ ᴛᴜᴛᴏʀɪᴀʟ {tutorial_num} ᴠᴀʟᴜᴇꜱ ✅\n\nᴛᴜᴛᴏʀɪᴀʟ ᴜʀʟ: {tutorial_msg.text}</b>", reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
 
@@ -934,7 +922,7 @@ async def delete_group_check_callback(client, query):
             ]
         ]
         await query.message.edit_text(
-            "<b>⚠️ ᴀʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ᴅᴇʟᴇᴛᴇ ᴛʜɪs ɢʀᴏᴜᴘ ꜰʀᴏᴍ ᴅᴀᴛᴀʙᴀsᴇ? ᴛʜᴇ ʙᴏᴛ ᴡɪʟ· ᴀʟsᴏ ʟᴇᴀᴠᴇ ᴛʜᴇ ɢʀᴏᴜᴘ.</b>",
+            "<b>⚠️ ᴀʀᴇ ʏᴏᴜ sᴜʀᴇ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ᴅᴇʟᴇᴛᴇ ᴛʜɪs ɢʀᴏᴜᴘ ꜰʀᴏᴍ ᴅᴀᴛᴀʙᴀsᴇ? ᴛʜᴇ ʙᴏᴛ ᴡɪʟʟ ᴀʟsᴏ ʟᴇᴀᴠᴇ ᴛʜᴇ ɢʀᴏᴜᴘ.</b>",
             reply_markup=InlineKeyboardMarkup(buttons),
             parse_mode=enums.ParseMode.HTML
         )
@@ -956,7 +944,7 @@ async def delete_group_callback(client, query):
             await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
             return
         await db.delete_chat(int(grp_id))
-        await query.answer("ɢʀᴏᴜᴘ ᴅᴇʟᴇᴛᴇᴅ ꜱᴜᴄᴄᴇꜱꜰᴜʟʟʏ ✅", show_alert=True)
+        await query.answer("ɢʀᴏᴜᴘ ᴅᴇʟᴇᴛᴇᴅ ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ✅", show_alert=True)
         await query.message.edit_text("<b>✅ ɢʀᴏᴜᴘ ᴅᴇʟᴇᴛᴇᴅ ꜰʀᴏᴍ ᴅᴀᴛᴀʙᴀsᴇ ᴀɴᴅ ʙᴏᴛ ʟᴇꜰᴛ ᴛʜᴇ ɢʀᴏᴜᴘ.</b>")
         try:
             await client.leave_chat(int(grp_id))
