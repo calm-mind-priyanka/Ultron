@@ -21,10 +21,9 @@ async def get_invite_link(client, grp_id):
 async def group_setting_buttons(grp_id):
     settings = await get_settings(grp_id)
     buttons = [[
-                InlineKeyboardButton('​📚 ʀᴇꜱᴜʟᴛ ᴍᴏᴅᴇ', callback_data=f'setgs#button#{settings.get("button")}#{grp_id}',),
-                InlineKeyboardButton('ʙᴜᴛᴛᴏɴ' if settings.get("button") else 'ᴛᴇxᴛ', callback_data=f'setgs#button#{settings.get("button")}#{grp_id}',),
+                InlineKeyboardButton('📚 ʀᴇꜱᴜʟᴛ ᴍᴏᴅᴇ', callback_data=f'resultmode_setgs#{grp_id}'),
             ],[
-                InlineKeyboardButton('​🗂 ꜰɪʟᴇꜱ ꜱᴇᴄᴜʀᴇ', callback_data=f'setgs#file_secure#{settings["file_secure"]}#{grp_id}',),
+                InlineKeyboardButton('🗂 ꜰɪʟᴇꜱ ꜱᴇᴄᴜʀᴇ', callback_data=f'setgs#file_secure#{settings["file_secure"]}#{grp_id}',),
                 InlineKeyboardButton('ᴇɴᴀʙʟᴇ' if settings["file_secure"] else 'ᴅɪꜱᴀʙʟᴇ', callback_data=f'setgs#file_secure#{settings["file_secure"]}#{grp_id}',),
             ],[
                 InlineKeyboardButton('🈵 ɪᴍᴅʙ', callback_data=f'setgs#imdb#{settings["imdb"]}#{grp_id}',),
@@ -36,18 +35,18 @@ async def group_setting_buttons(grp_id):
                 InlineKeyboardButton('🗑️ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ', callback_data=f'setgs#auto_delete#{settings["auto_delete"]}#{grp_id}',),
                 InlineKeyboardButton('ᴇɴᴀʙʟᴇ' if settings["auto_delete"] else 'ᴅɪꜱᴀʙʟᴇ', callback_data=f'setgs#auto_delete#{settings["auto_delete"]}#{grp_id}',),
             ],[
-                InlineKeyboardButton('​ℹ️ ᴍᴀx ʀᴇꜱᴜʟᴛꜱ', callback_data=f'setgs#max_btn#{settings["max_btn"]}#{grp_id}',),
+                InlineKeyboardButton('ℹ️ ᴍᴀx ʀᴇꜱᴜʟᴛꜱ', callback_data=f'setgs#max_btn#{settings["max_btn"]}#{grp_id}',),
                 InlineKeyboardButton('10' if settings["max_btn"] else f'{MAX_B_TN}', callback_data=f'setgs#max_btn#{settings["max_btn"]}#{grp_id}',),
             ],[
-                InlineKeyboardButton('🖇️ ꜱᴇᴛ ꜱʜᴏʀᴛʟɪɴᴋ', callback_data=f'verification_setgs#{grp_id}',),
+                InlineKeyboardButton('🖇️ <b>ꜱᴇᴛ ꜱʜᴏʀᴛʟɪɴᴋ</b>', callback_data=f'verification_setgs#{grp_id}',),
             ],[
                 InlineKeyboardButton('ʟᴏɢ ᴄʜᴀɴɴᴇʟ', callback_data=f'log_setgs#{grp_id}',),
-                InlineKeyboardButton('​📝 ꜰɪʟᴇꜱ ᴄᴀᴘᴛɪᴏɴ', callback_data=f'caption_setgs#{grp_id}',),
+                InlineKeyboardButton('📝 ꜰɪʟᴇꜱ ᴄᴀᴘᴛɪᴏɴ', callback_data=f'caption_setgs#{grp_id}',),
             ],[
-                InlineKeyboardButton('​👥 ꜰᴏʀᴄᴇ ᴄʜᴀɴɴᴇʟ', callback_data=f'fsub_setgs#{grp_id}',),
-                InlineKeyboardButton('ᴅᴇʟᴇᴛᴇ ɢʀᴏᴜᴘ', callback_data=f'delete_group_check#{grp_id}')
+                InlineKeyboardButton('👥 ꜰᴏʀᴄᴇ ᴄʜᴀɴɴᴇʟ', callback_data=f'fsub_setgs#{grp_id}',),
+                InlineKeyboardButton('ᴅᴇʟᴇᴛᴇ ɢʀᴏᴜᴘ', callback_data=f'delete_group_check#{grp_id}'),
             ],[
-                InlineKeyboardButton('​‼️ ᴄʟᴏꜱᴇ ꜱᴇᴛᴛɪɴɢꜱ ᴍᴇɴᴜ ‼️', callback_data='close_data')
+                InlineKeyboardButton('‼️ ᴄʟᴏꜱᴇ ꜱᴇᴛᴛɪɴgs ᴍᴇɴᴜ ‼️', callback_data='close_data')
     ]]
     return buttons
 
