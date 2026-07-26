@@ -37,6 +37,12 @@ FRESH = {}
 SPELL_CHECK = {}
 lock = asyncio.Lock()
 
+def get_readable_time(seconds: int) -> str:
+    if seconds >= 60:
+        minutes = seconds // 60
+        return f"{minutes} minute{'s' if minutes > 1 else ''}"
+    return f"{seconds} second{'s' if seconds > 1 else ''}"
+
 @Client.on_message(filters.group & filters.text & filters.incoming)
 async def give_filter(client, message):
     bot_id = client.me.id
@@ -118,7 +124,7 @@ async def refercall(bot, query):
         parse_mode=enums.ParseMode.HTML
         )
     await query.answer()
-	
+
 async def build_pagination_buttons(btn, total_results, current_offset, next_offset, req, key, settings):
     limit = 10 if settings.get('max_btn') else int(MAX_B_TN)
     total_pages = math.ceil(total_results / limit)
@@ -150,7 +156,6 @@ async def generic_filter_handler(client, query, key, offset, search_query):
     settings = await get_settings(chat_id)
     req = query.from_user.id
     btn = []
-        # ✅ CORRECT ALIGNMENT
     if settings.get('button'):
         for file in files:
             btn.append([InlineKeyboardButton(
@@ -171,7 +176,6 @@ async def generic_filter_handler(client, query, key, offset, search_query):
         InlineKeyboardButton("ꜱᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}")
     ])
 
-
     await build_pagination_buttons(btn, total_results, offset, n_offset, req, key, settings)
     cap = ""
     if not settings.get('button'):
@@ -179,6 +183,12 @@ async def generic_filter_handler(client, query, key, offset, search_query):
         time_difference = timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second+(curr_time.microsecond/1000000))) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second+(curr_time.microsecond/1000000)))
         remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
         cap = await get_cap(settings, remaining_seconds, files, query, total_results, search_query, offset)
+        
+        # ⬇️ ADDED FOR LINK MODE NEXT/BACK ⬇️
+        del_seconds = settings.get("auto_del_time", AUTO_DELETE_TIME)
+        readable_time = get_readable_time(del_seconds)
+        cap += f"\n\n<blockquote>⚠️ <b>ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴀꜰᴛᴇʀ {readable_time} ᴛᴏ ᴀᴠᴏɪᴅ ᴄᴏᴘʏʀɪɢʜᴛ ɪꜱꜱᴜᴇꜱ 🗑</b></blockquote>"
+
         try:
             await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True, parse_mode=enums.ParseMode.HTML)
         except MessageNotModified:
@@ -631,7 +641,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 chat_id=BIN_CHANNEL,
                 file_id=file_id,
             )
-            fileName = {quote_plus(get_name(silent_msg))}
+            fileName = quote_plus(get_name(silent_msg))
             silent_stream = f"{URL}watch/{str(silent_msg.id)}/{quote_plus(get_name(silent_msg))}?hash={get_hash(silent_msg)}"
             silent_download = f"{URL}{str(silent_msg.id)}/{quote_plus(get_name(silent_msg))}?hash={get_hash(silent_msg)}"
             btn= [[
@@ -690,7 +700,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             else:            
                 await db.give_free_trial(user_id)
                 await query.message.reply_text(
-                    text="<b>🥳 ᴄᴏɴɢʀᴀᴛᴜʟᴀᴛɪᴏɴꜱ\n\n🎉 ʏᴏᴜ ᴄᴀɴ ᴜsᴇ ꜰʀᴇᴇ ᴛʀᴀɪʟ ꜰᴏʀ <u>5 ᴍɪɴᴜᴛᴇs</u> ꜰʀᴏᴍ ɴᴏᴡ !</b>",
+                    text="<b>🥳 ᴄᴏɴɢʀᴀᴛᴜʟᴀᴛɪᴏɴꜱ\n\n🎉 ʏᴏᴜ ᴄᴀɴ ᴜsᴇ ꜰʀᴇᴇ ᴛʀᴀɪʟ ꜰᴏʀ <u>5 ᴍɪɴᴜᴛes</u> ꜰʀᴏᴍ ɴᴏᴡ !</b>",
                     quote=False,
                     disable_web_page_preview=True,                  
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("💸 ᴄʜᴇᴄᴋᴏᴜᴛ ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴꜱ 💸", callback_data='seeplans')]]))
@@ -866,7 +876,7 @@ async def auto_filter(client, msg, spoll=False):
                     ai_sts = await m.edit('🤖 ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ, ᴀɪ ɪꜱ ᴄʜᴇᴄᴋɪɴɢ ʏᴏᴜʀ ꜱᴘᴇʟʟɪɴɢ...')
                     is_misspelled = await ai_spell_check(chat_id = message.chat.id,wrong_name=search)
                     if is_misspelled:
-                        await ai_sts.edit(f'<b><i>✅ Aɪ Sᴜɢɢᴇsᴛᴇᴅ ᴍᴇ<code> {is_misspelled}</code> \nSᴏ Iᴍ Sᴇᴀʀᴄʜɪɴɢ ғᴏʀ <code>{is_misspelled}</code></i></b>')
+                        await ai_sts.edit(f'<b><i>✅ Aɪ Sᴜɢɢᴇsᴛᴇᴅ ᴍᴇ<code> {is_misspelled}</code> \nSᴏ Iᴍ SᴇᴀRᴄʜɪɴɢ ғᴏʀ <code>{is_misspelled}</code></i></b>')
                         await asyncio.sleep(2)
                         message.text = is_misspelled
                         await ai_sts.delete()
@@ -887,7 +897,6 @@ async def auto_filter(client, msg, spoll=False):
     temp.GETALL[key] = files
     temp.SHORT[message.from_user.id] = message.chat.id
     btn = []
-        # ✅ CORRECT ALIGNMENT
     if settings.get('button'):
         for file in files:
             btn.append([InlineKeyboardButton(
@@ -969,6 +978,11 @@ async def auto_filter(client, msg, spoll=False):
         if not settings.get('button'):
             for file_num, file in enumerate(files, start=1):
                 cap += f"\n\n<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{message.chat.id}_{file.file_id}'>{get_size(file.file_size)} | {clean_filename(file.file_name)}</a></b>"
+            
+            # ⬇️ ADDED FOR LINK MODE WITH IMDB ⬇️
+            del_seconds = settings.get("auto_del_time", AUTO_DELETE_TIME)
+            readable_time = get_readable_time(del_seconds)
+            cap += f"\n\n<blockquote>⚠️ <b>ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴀꜰᴛᴇʀ {readable_time} ᴛᴏ ᴀᴠᴏɪᴅ ᴄᴏᴘʏʀɪɢʜᴛ ɪꜱꜱᴜᴇꜱ 🗑</b></blockquote>"
     else:
         if settings.get('button'):
             cap = f"<b><blockquote>Hᴇʏ,{message.from_user.mention}</blockquote>\n\n📂 Hᴇʀᴇ I Fᴏᴜɴᴅ Fᴏʀ Yᴏᴜʀ Sᴇᴀʀᴄʜ <code>{search}</code></b>\n\n"
@@ -976,6 +990,12 @@ async def auto_filter(client, msg, spoll=False):
             cap = f"<b><blockquote>Hᴇʏ,{message.from_user.mention}</blockquote>\n\n📂 Hᴇʀᴇ I Fᴏᴜɴᴅ Fᴏʀ Yᴏᴜʀ Sᴇᴀʀᴄʜ <code>{search}</code></b>\n\n"            
             for file_num, file in enumerate(files, start=1):
                 cap += f"<b>{file_num}. <a href='https://telegram.me/{temp.U_NAME}?start=file_{message.chat.id}_{file.file_id}'>{get_size(file.file_size)} | {clean_filename(file.file_name)}\n\n</a></b>"                  
+            
+            # ⬇️ ADDED FOR LINK MODE WITHOUT IMDB ⬇️
+            del_seconds = settings.get("auto_del_time", AUTO_DELETE_TIME)
+            readable_time = get_readable_time(del_seconds)
+            cap += f"<blockquote>⚠️ <b>ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴀꜰᴛᴇʀ {readable_time} ᴛᴏ ᴀᴠᴏɪᴅ ᴄᴏᴘʏʀɪɢʜᴛ ɪꜱꜱᴜᴇꜱ 🗑</b></blockquote>"
+            
     try:
         if imdb and poster_url:
             try:
