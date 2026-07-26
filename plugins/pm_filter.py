@@ -159,16 +159,16 @@ async def generic_filter_handler(client, query, key, offset, search_query):
             )])
 
     btn.append([
-        InlineKeyboardButton("LANGUAGE", callback_data=f"languages#{key}#0"),
-        InlineKeyboardButton("QUALITY", callback_data=f"qualities#{key}#0")
+        InlineKeyboardButton("ʟᴀɴɢᴜᴀɢᴇ", callback_data=f"languages#{key}#0"),
+        InlineKeyboardButton("ǫᴜᴀʟɪᴛʏ", callback_data=f"qualities#{key}#0")
     ])
 
     btn.append([
-        InlineKeyboardButton("SEASON", callback_data=f"seasons#{key}#0")
+        InlineKeyboardButton("ꜱᴇᴀꜱᴏɴ", callback_data=f"seasons#{key}#0")
     ])
 
     btn.append([
-        InlineKeyboardButton("SEND ALL", callback_data=f"sendfiles#{key}")
+        InlineKeyboardButton("ꜱᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}")
     ])
 
 
@@ -896,16 +896,16 @@ async def auto_filter(client, msg, spoll=False):
             )])
 
     btn.append([
-        InlineKeyboardButton("LANGUAGE", callback_data=f"languages#{key}#0"),
-        InlineKeyboardButton("QUALITY", callback_data=f"qualities#{key}#0")
+        InlineKeyboardButton("ʟᴀɴɢᴜᴀɢᴇ", callback_data=f"languages#{key}#0"),
+        InlineKeyboardButton("ǫᴜᴀʟɪᴛʏ", callback_data=f"qualities#{key}#0")
     ])
 
     btn.append([
-        InlineKeyboardButton("SEASON", callback_data=f"seasons#{key}#0")
+        InlineKeyboardButton("ꜱᴇᴀꜱᴏɴ", callback_data=f"seasons#{key}#0")
     ])
 
     btn.append([
-        InlineKeyboardButton("SEND ALL", callback_data=f"sendfiles#{key}")
+        InlineKeyboardButton("ꜱᴇɴᴅ ᴀʟʟ", callback_data=f"sendfiles#{key}")
     ])
 
 
