@@ -150,24 +150,26 @@ async def generic_filter_handler(client, query, key, offset, search_query):
     settings = await get_settings(chat_id)
     req = query.from_user.id
     btn = []
-    if settings.get('button'):
+        if settings.get('button'):
         for file in files:
             btn.append([InlineKeyboardButton(
                 text=f"{silent_size(file.file_size)} | {extract_tag(file.file_name)} {clean_filename(file.file_name)}",
                 callback_data=f'file#{file.file_id}'
             )])
+
     btn.append([
-    InlineKeyboardButton("LANGUAGE", callback_data=f"languages#{key}#0"),
-    InlineKeyboardButton("QUALITY", callback_data=f"qualities#{key}#0")
-])
+        InlineKeyboardButton("LANGUAGE", callback_data=f"languages#{key}#0"),
+        InlineKeyboardButton("QUALITY", callback_data=f"qualities#{key}#0")
+    ])
 
-btn.append([
-    InlineKeyboardButton("SEASON", callback_data=f"seasons#{key}#0")
-])
+    btn.append([
+        InlineKeyboardButton("SEASON", callback_data=f"seasons#{key}#0")
+    ])
 
-btn.append([
-    InlineKeyboardButton("SEND ALL", callback_data=f"sendfiles#{key}")
-])
+    btn.append([
+        InlineKeyboardButton("SEND ALL", callback_data=f"sendfiles#{key}")
+    ])
+
     await build_pagination_buttons(btn, total_results, offset, n_offset, req, key, settings)
     cap = ""
     if not settings.get('button'):
@@ -883,26 +885,26 @@ async def auto_filter(client, msg, spoll=False):
     temp.GETALL[key] = files
     temp.SHORT[message.from_user.id] = message.chat.id
     btn = []
-    
-    if settings.get('button'):
+        if settings.get('button'):
         for file in files:
             btn.append([InlineKeyboardButton(
                 text=f"{silent_size(file.file_size)} | {extract_tag(file.file_name)} {clean_filename(file.file_name)}",
                 callback_data=f'file#{file.file_id}'
             )])
-    
+
     btn.append([
-    InlineKeyboardButton("LANGUAGE", callback_data=f"languages#{key}#0"),
-    InlineKeyboardButton("QUALITY", callback_data=f"qualities#{key}#0")
-])
+        InlineKeyboardButton("LANGUAGE", callback_data=f"languages#{key}#0"),
+        InlineKeyboardButton("QUALITY", callback_data=f"qualities#{key}#0")
+    ])
 
-btn.append([
-    InlineKeyboardButton("SEASON", callback_data=f"seasons#{key}#0")
-])
+    btn.append([
+        InlineKeyboardButton("SEASON", callback_data=f"seasons#{key}#0")
+    ])
 
-btn.append([
-    InlineKeyboardButton("SEND ALL", callback_data=f"sendfiles#{key}")
-])
+    btn.append([
+        InlineKeyboardButton("SEND ALL", callback_data=f"sendfiles#{key}")
+    ])
+
 
     if offset != "":
         req = message.from_user.id if message.from_user else 0
