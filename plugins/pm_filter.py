@@ -156,12 +156,18 @@ async def generic_filter_handler(client, query, key, offset, search_query):
                 text=f"{silent_size(file.file_size)} | {extract_tag(file.file_name)} {clean_filename(file.file_name)}",
                 callback_data=f'file#{file.file_id}'
             )])
-    btn.insert(0, [
-        InlineKeyboardButton("ᴘɪxᴇʟ", callback_data=f"qualities#{key}#0"),
-        InlineKeyboardButton("ʟᴀɴɢᴜᴀɢᴇ", callback_data=f"languages#{key}#0"),
-        InlineKeyboardButton("ꜱᴇᴀꜱᴏɴ",  callback_data=f"seasons#{key}#0")
-    ])
-    btn.insert(1, [InlineKeyboardButton("📥 Sᴇɴᴅ Aʟʟ 📥", callback_data=f"sendfiles#{key}")])
+    btn.append([
+    InlineKeyboardButton("LANGUAGE", callback_data=f"languages#{key}#0"),
+    InlineKeyboardButton("QUALITY", callback_data=f"qualities#{key}#0")
+])
+
+btn.append([
+    InlineKeyboardButton("SEASON", callback_data=f"seasons#{key}#0")
+])
+
+btn.append([
+    InlineKeyboardButton("SEND ALL", callback_data=f"sendfiles#{key}")
+])
     await build_pagination_buttons(btn, total_results, offset, n_offset, req, key, settings)
     cap = ""
     if not settings.get('button'):
@@ -885,12 +891,18 @@ async def auto_filter(client, msg, spoll=False):
                 callback_data=f'file#{file.file_id}'
             )])
     
-    btn.insert(0, [
-        InlineKeyboardButton("ᴘɪxᴇʟ", callback_data=f"qualities#{key}#0"),
-        InlineKeyboardButton("ʟᴀɴɢᴜᴀɢᴇ", callback_data=f"languages#{key}#0"),
-        InlineKeyboardButton("ꜱᴇᴀꜱᴏɴ",  callback_data=f"seasons#{key}#0")
-    ])
-    btn.insert(1, [InlineKeyboardButton("📥 Sᴇɴᴅ Aʟʟ 📥", callback_data=f"sendfiles#{key}")])
+    btn.append([
+    InlineKeyboardButton("LANGUAGE", callback_data=f"languages#{key}#0"),
+    InlineKeyboardButton("QUALITY", callback_data=f"qualities#{key}#0")
+])
+
+btn.append([
+    InlineKeyboardButton("SEASON", callback_data=f"seasons#{key}#0")
+])
+
+btn.append([
+    InlineKeyboardButton("SEND ALL", callback_data=f"sendfiles#{key}")
+])
 
     if offset != "":
         req = message.from_user.id if message.from_user else 0
