@@ -150,7 +150,8 @@ async def generic_filter_handler(client, query, key, offset, search_query):
     settings = await get_settings(chat_id)
     req = query.from_user.id
     btn = []
-        if settings.get('button'):
+        # ✅ CORRECT ALIGNMENT
+    if settings.get('button'):
         for file in files:
             btn.append([InlineKeyboardButton(
                 text=f"{silent_size(file.file_size)} | {extract_tag(file.file_name)} {clean_filename(file.file_name)}",
@@ -169,6 +170,7 @@ async def generic_filter_handler(client, query, key, offset, search_query):
     btn.append([
         InlineKeyboardButton("SEND ALL", callback_data=f"sendfiles#{key}")
     ])
+
 
     await build_pagination_buttons(btn, total_results, offset, n_offset, req, key, settings)
     cap = ""
@@ -885,7 +887,8 @@ async def auto_filter(client, msg, spoll=False):
     temp.GETALL[key] = files
     temp.SHORT[message.from_user.id] = message.chat.id
     btn = []
-        if settings.get('button'):
+        # ✅ CORRECT ALIGNMENT
+    if settings.get('button'):
         for file in files:
             btn.append([InlineKeyboardButton(
                 text=f"{silent_size(file.file_size)} | {extract_tag(file.file_name)} {clean_filename(file.file_name)}",
