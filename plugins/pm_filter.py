@@ -559,7 +559,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
     elif query.data.startswith("Type_Correct_Spelling"):
         await handle_alert_status(client, query, "♨️ Type Correct Spelling ♨️",
                                   "<b>Hᴇʏ {user_mention}\n\nWᴇ Dᴇᴄʟɪɴᴇᴅ Yᴏᴜʀ Rᴇǫᴜᴇsᴛ <code>{content}</code>, Bᴇᴄᴀᴜsᴇ Yᴏᴜʀ Sᴘᴇʟʟɪɴɢ Wᴀs Wʀᴏɴɢ 😢</b>",
-                                  "#Wʀᴏɴɢ_Sᴘᴇʟʟɪɴɢ 😑")l
+                                  "#Wʀᴏɴɢ_Sᴘᴇʟʟɪɴɢ 😑")
 
     elif query.data.startswith("Not_Available_In_The_Hindi"):
         await handle_alert_status(client, query, " Not Available In The Hindi ",
