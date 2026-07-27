@@ -735,8 +735,8 @@ async def cb_handler(client: Client, query: CallbackQuery):
     elif query.data == "buy":
         try:
             btn = [[ 
-                InlineKeyboardButton('ꜱᴛᴀʀ', callback_data='star'),
-                InlineKeyboardButton('ᴜᴘɪ', callback_data='upi')
+                InlineKeyboardButton("📸 SEND SCREENSHOT", url="https://t.me/YourUsername")
+                InlineKeyboardButton('💎 ᴄᴜꜱᴛᴏᴍ ᴘʟᴀɴ 💎', callback_data='custom_plan')
             ],[
                 InlineKeyboardButton('⋞ ʙᴀᴄᴋ', callback_data='premium')
             ]]
@@ -754,26 +754,41 @@ async def cb_handler(client: Client, query: CallbackQuery):
         except Exception as e:
             LOGGER.error(e)
 
-    elif query.data == "upi":
-        try:
-            btn = [[ 
-                InlineKeyboardButton('📱 ꜱᴇɴᴅ  ᴘᴀʏᴍᴇɴᴛ ꜱᴄʀᴇᴇɴꜱʜᴏᴛ', url=OWNER_LNK),
-            ],[
-                InlineKeyboardButton('⋞ ʙᴀᴄᴋ', callback_data='buy')
-            ]]
-            reply_markup = InlineKeyboardMarkup(btn)
-            await client.edit_message_media(
-                query.message.chat.id, 
-                query.message.id, 
-                InputMediaPhoto(SUBSCRIPTION)
-	        ) 
-            await query.message.edit_text(
-                text=script.PREMIUM_UPI_TEXT.format(query.from_user.mention),
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML
-            ) 
-        except Exception as e:
-            LOGGER.error(e)
+    elif query.data == "custom_plan":
+    try:
+        btn = [[
+            InlineKeyboardButton('📱 ᴄᴏɴᴛᴀᴄᴛ ᴏᴡɴᴇʀ', url=OWNER_LNK),
+        ],[
+            InlineKeyboardButton('⋞ ʙᴀᴄᴋ', callback_data='buy')
+        ]]
+
+        reply_markup = InlineKeyboardMarkup(btn)
+
+        await client.edit_message_media(
+            query.message.chat.id,
+            query.message.id,
+            InputMediaPhoto(SUBSCRIPTION)
+        )
+
+        await query.message.edit_text(
+            text=f"""<b>👋 ʜᴇʏ {query.from_user.mention},
+
+🎁 ᴏᴛʜᴇʀ ᴘʟᴀɴ
+
+⏰ ᴄᴜꜱᴛᴏᴍɪꜱᴇᴅ ᴅᴀʏꜱ 💸 ᴀᴄᴄᴏʀᴅɪɴɢ ᴛᴏ ᴅᴀʏꜱ ʏᴏᴜ ᴄʜᴏᴏꜱᴇ
+
+🏆 ɪꜰ ʏᴏᴜ ᴡᴀɴᴛ ᴀ ɴᴇᴡ ᴘʟᴀɴ ᴀᴘᴀʀᴛ ꜰʀᴏᴍ ᴛʜᴇ ɢɪᴠᴇɴ ᴘʟᴀɴ, ᴛʜᴇɴ ʏᴏᴜ ᴄᴀɴ ᴛᴀʟᴋ ᴛᴏ ᴏᴜʀ ᴏᴡɴᴇʀ ᴅɪʀᴇᴄᴛʟʏ.
+
+👨‍💻 ᴄᴏɴᴛᴀᴄᴛ ᴛʜᴇ ᴏᴡɴᴇʀ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ᴏᴛʜᴇʀ ᴘʟᴀɴ.
+
+➛ ᴜꜱᴇ /plan ᴛᴏ ꜱᴇᴇ ᴀʟʟ ᴏᴜʀ ᴘʟᴀɴꜱ ᴀᴛ ᴏɴᴄᴇ.
+➛ ᴄʜᴇᴄᴋ ʏᴏᴜʀ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ ʙʏ ᴜꜱɪɴɢ: /myplan</b>""",
+            reply_markup=reply_markup,
+            parse_mode=enums.ParseMode.HTML
+        )
+
+    except Exception as e:
+        LOGGER.error(e)
 
     elif query.data == "star":
         try:
