@@ -753,42 +753,40 @@ async def cb_handler(client: Client, query: CallbackQuery):
             ) 
         except Exception as e:
             LOGGER.error(e)
+                   
+	elif query.data == "custom_plan":
+        try:
+            btn = [[
+                InlineKeyboardButton('📱 ᴄᴏɴᴛᴀᴄᴛ ᴏᴡɴᴇʀ', url=OWNER_LNK),
+            ],[
+                InlineKeyboardButton('⋞ ʙᴀᴄᴋ', callback_data='buy')
+            ]]
 
-    elif query.data == "custom_plan":
-    try:
-        btn = [[
-            InlineKeyboardButton('📱 ᴄᴏɴᴛᴀᴄᴛ ᴏᴡɴᴇʀ', url=OWNER_LNK),
-        ],[
-            InlineKeyboardButton('⋞ ʙᴀᴄᴋ', callback_data='buy')
-        ]]
+            reply_markup = InlineKeyboardMarkup(btn)
 
-        reply_markup = InlineKeyboardMarkup(btn)
+            await client.edit_message_media(
+                query.message.chat.id,
+                query.message.id,
+                InputMediaPhoto(SUBSCRIPTION)
+            )
 
-        await client.edit_message_media(
-            query.message.chat.id,
-            query.message.id,
-            InputMediaPhoto(SUBSCRIPTION)
-        )
+            plan_text = (
+                f"<b>👋 ʜᴇʏ {query.from_user.mention},\n\n"
+                f"🎁 ᴏᴛʜᴇʀ ᴘʟᴀɴ\n\n"
+                f"⏰ ᴄᴜꜱᴛᴏᴍɪꜱᴇᴅ ᴅᴀʏꜱ 💸 ᴀᴄᴄᴏʀᴅɪɴɢ ᴛᴏ ᴅᴀʏꜱ ʏᴏᴜ ᴄʜᴏᴏꜱᴇ\n\n"
+                f"🏆 ɪꜰ ʏᴏᴜ ᴡᴀɴᴛ ᴀ ɴᴇᴡ ᴘʟᴀɴ ᴀᴘᴀʀᴛ ꜰʀᴏᴍ ᴛʜᴇ ɢɪᴠᴇɴ ᴘʟᴀɴ, ᴛʜᴇɴ ʏᴏᴜ ᴄᴀɴ ᴛᴀʟᴋ ᴛᴏ ᴏᴜʀ ᴏᴡɴᴇʀ ᴅɪʀᴇᴄᴛʟʏ.\n\n"
+                f"👨‍💻 ᴄᴏɴᴛᴀᴄᴛ ᴛʜᴇ ᴏᴡɴᴇʀ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ᴏᴛʜᴇʀ ᴘʟᴀɴ.\n\n"
+                f"➛ ᴜꜱᴇ /plan ᴛᴏ ꜱᴇᴇ ᴀʟʟ ᴏᴜʀ ᴘʟᴀɴꜱ ᴀᴛ ᴏɴᴄᴇ.\n"
+                f"➛ ᴄʜᴇᴄᴋ ʏᴏᴜʀ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ ʙʏ ᴜꜱɪɴɢ: /myplan</b>"
+            )
 
-        await query.message.edit_text(
-            text=f"""<b>👋 ʜᴇʏ {query.from_user.mention},
-
-🎁 ᴏᴛʜᴇʀ ᴘʟᴀɴ
-
-⏰ ᴄᴜꜱᴛᴏᴍɪꜱᴇᴅ ᴅᴀʏꜱ 💸 ᴀᴄᴄᴏʀᴅɪɴɢ ᴛᴏ ᴅᴀʏꜱ ʏᴏᴜ ᴄʜᴏᴏꜱᴇ
-
-🏆 ɪꜰ ʏᴏᴜ ᴡᴀɴᴛ ᴀ ɴᴇᴡ ᴘʟᴀɴ ᴀᴘᴀʀᴛ ꜰʀᴏᴍ ᴛʜᴇ ɢɪᴠᴇɴ ᴘʟᴀɴ, ᴛʜᴇɴ ʏᴏᴜ ᴄᴀɴ ᴛᴀʟᴋ ᴛᴏ ᴏᴜʀ ᴏᴡɴᴇʀ ᴅɪʀᴇᴄᴛʟʏ.
-
-👨‍💻 ᴄᴏɴᴛᴀᴄᴛ ᴛʜᴇ ᴏᴡɴᴇʀ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ᴏᴛʜᴇʀ ᴘʟᴀɴ.
-
-➛ ᴜꜱᴇ /plan ᴛᴏ ꜱᴇᴇ ᴀʟʟ ᴏᴜʀ ᴘʟᴀɴꜱ ᴀᴛ ᴏɴᴄᴇ.
-➛ ᴄʜᴇᴄᴋ ʏᴏᴜʀ ᴀᴄᴛɪᴠᴇ ᴘʟᴀɴ ʙʏ ᴜꜱɪɴɢ: /myplan</b>""",
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
-
-    except Exception as e:
-        LOGGER.error(e)
+            await query.message.edit_text(
+                text=plan_text,
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML           
+		)
+        except Exception as e:
+            LOGGER.error(e)
 
     elif query.data == "star":
         try:
