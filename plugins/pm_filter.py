@@ -735,7 +735,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
     elif query.data == "buy":
         try:
             btn = [[ 
-                InlineKeyboardButton("📸 SEND SCREENSHOT", url="https://t.me/YourUsername")
+                InlineKeyboardButton("📸 SEND SCREENSHOT", url="https://t.me/YourUsername"),
                 InlineKeyboardButton('💎 ᴄᴜꜱᴛᴏᴍ ᴘʟᴀɴ 💎', callback_data='custom_plan')
             ],[
                 InlineKeyboardButton('⋞ ʙᴀᴄᴋ', callback_data='premium')
