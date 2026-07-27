@@ -183,11 +183,12 @@ class script(object):
 
     PREMIUM_TEXT = """<b>💎 <u>ᴘʀᴇᴍɪᴜᴍ ᴘʟᴀɴꜱ</u> 💎
 
-🗓️ 07 ᴅᴀʏꜱ  ➪  15 ₹ / 15 ⭐
-🗓️ 15 ᴅᴀʏꜱ  ➪  30 ₹ / 30 ⭐
-🗓️ 01 ᴍᴏɴᴛʜ ➪  60 ₹ / 60 ⭐
-🗓️ 02 ᴍᴏɴᴛʜꜱ ➪ 120 ₹ / 120 ⭐
-🗓️ 03 ᴍᴏɴᴛʜꜱ ➪ 220 ₹ / 220 ⭐
+❏ ₹023   ➠   01 WEEK  
+❏ ₹059   ➠   01 MONTH 🔥  
+❏ ₹149   ➠   03 MONTH   
+❏ ₹269   ➠   06 MONTH  
+❏ ₹499   ➠   12 MONTH 💰
+❏ ₹999   ➠   LIFE TIME + VIP SUPPORT
 
 📜 <a href='https://t.me/+blcE2jS-iGtkMjNl'>ᴄʜᴇᴄᴋ ᴘʀᴏᴏꜰꜱ</a>
 
