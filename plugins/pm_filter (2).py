@@ -559,7 +559,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
     elif query.data.startswith("Type_Correct_Spelling"):
         await handle_alert_status(client, query, "♨️ Type Correct Spelling ♨️",
                                   "<b>Hᴇʏ {user_mention}\n\nWᴇ Dᴇᴄʟɪɴᴇᴅ Yᴏᴜʀ Rᴇǫᴜᴇsᴛ <code>{content}</code>, Bᴇᴄᴀᴜsᴇ Yᴏᴜʀ Sᴘᴇʟʟɪɴɢ Wᴀs Wʀᴏɴɢ 😢</b>",
-                                  "#Wʀᴏɴɢ_Sᴘᴇʟʟɪɴɢ 😑")
+                                  "#Wʀᴏɴɢ_Sᴘᴇʟʟɪɴɢ 😑")l
 
     elif query.data.startswith("Not_Available_In_The_Hindi"):
         await handle_alert_status(client, query, " Not Available In The Hindi ",
@@ -826,7 +826,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
         
     elif query.data == "source":
         buttons = [[
-            InlineKeyboardButton('ꜱᴏᴜʀᴄᴇ ᴄᴏᴅᴇ 📜', url='https://github.com/NBBotz/Auto-Filter-Bot.git'),
+            InlineKeyboardButton('ꜱᴏᴜʀᴄᴇ ᴄᴏᴅᴇ 📜', url=''),
             InlineKeyboardButton('⇋ ʙᴀᴄᴋ ⇋', callback_data='me')
         ]]
         reply_markup = InlineKeyboardMarkup(buttons)
@@ -868,7 +868,7 @@ async def auto_filter(client, msg, spoll=False):
             search = search.replace(":", "")
             search = search.replace("'", "")
             search = re.sub(r'\s+', ' ', search).strip()
-            m=await message.reply_text(f'<b>Wait {message.from_user.mention} 🎯 Searching Your Query: <i>{search}...</i></b>', reply_to_message_id=message.id)
+            m=await message.reply_text(f'<b>{message.from_user.mention} 🎯 Searching... <i>{search}</i></b>', reply_to_message_id=message.id)
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
             settings = await get_settings(message.chat.id)
             if not files:
@@ -888,7 +888,7 @@ async def auto_filter(client, msg, spoll=False):
     else:
         message = msg.message.reply_to_message
         search, files, offset, total_results = spoll
-        m=await message.reply_text(f'<b>Wait {message.from_user.mention} 🎯 Searching You Query:<i>{search}...</i></b>', reply_to_message_id=message.id)
+        m=await message.reply_text(f'<b>{message.from_user.mention} 🎯 Searching... <i>{search}</i></b>', reply_to_message_id=message.id)
         settings = await get_settings(message.chat.id)
         await msg.message.delete()
     
