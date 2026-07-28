@@ -60,7 +60,7 @@ AUTH_CHANNEL = environ.get("AUTH_CHANNEL", "-1002260068200") # add multiple chan
 AUTH_REQ_CHANNEL = environ.get('AUTH_REQ_CHANNEL', '-1002260068200')
 
 IS_VERIFY = is_enabled('IS_VERIFY', True)
-LOG_VR_CHANNEL = int(environ.get('LOG_VR_CHANNEL', '-1004442919011')
+LOG_VR_CHANNEL = int(environ.get('LOG_VR_CHANNEL', '-1004442919011'))
 LOG_API_CHANNEL = int(environ.get('LOG_API_CHANNEL', '-1004467946960'))
 VERIFY_IMG = environ.get("VERIFY_IMG", "https://telegra.ph/file/9ecc5d6e4df5b83424896.jpg")
 
@@ -68,17 +68,17 @@ TUTORIAL = environ.get("TUTORIAL", "https://t.me/+URI0ggQ1mLAyM2Y1")
 TUTORIAL_2 = environ.get("TUTORIAL_2", "https://t.me/+URI0ggQ1mLAyM2Y1")
 TUTORIAL_3 = environ.get("TUTORIAL_3", "https://t.me/+URI0ggQ1mLAyM2Y1")
 
-SHORTENER_API = environ.get("SHORTENER_API", "")
-SHORTENER_WEBSITE = environ.get("SHORTENER_WEBSITE", "")
+SHORTENER_API = environ.get("SHORTENER_API", "204bba345b04f7812f6de7e079f063d9ab3709b9")
+SHORTENER_WEBSITE = environ.get("SHORTENER_WEBSITE", "https://arolinks.com")
 
-SHORTENER_API2 = environ.get("SHORTENER_API2", "")
-SHORTENER_WEBSITE2 = environ.get("SHORTENER_WEBSITE2", "")
+SHORTENER_API2 = environ.get("SHORTENER_API2", "e2239d738dd541fe55fe74ae6e00c782dc843715")
+SHORTENER_WEBSITE2 = environ.get("SHORTENER_WEBSITE2", "http://CPMShort.com")
 
-SHORTENER_API3 = environ.get("SHORTENER_API3", "")
-SHORTENER_WEBSITE3 = environ.get("SHORTENER_WEBSITE3", "")
+SHORTENER_API3 = environ.get("SHORTENER_API3", "0eb911f6bd85416d49e665a10688d810bfd5154d")
+SHORTENER_WEBSITE3 = environ.get("SHORTENER_WEBSITE3", "https://linkshortify.com")
 
-TWO_VERIFY_GAP = int(environ.get('TWO_VERIFY_GAP', "1200"))
-THREE_VERIFY_GAP = int(environ.get('THREE_VERIFY_GAP', "54000"))
+TWO_VERIFY_GAP = int(environ.get('TWO_VERIFY_GAP', "300"))
+THREE_VERIFY_GAP = int(environ.get('THREE_VERIFY_GAP', "300"))
 
 MOVIE_UPDATE_NOTIFICATION = bool(environ.get("MOVIE_UPDATE_NOTIFICATION", False))
 NO_RESULTS_MSG = bool(environ.get("NO_RESULTS_MSG", True))
@@ -86,7 +86,7 @@ MAX_B_TN = environ.get("MAX_B_TN", "8")
 MAX_BTN = is_enabled((environ.get('MAX_BTN', "True")), True)
 PORT = environ.get("PORT", "8089")
 MSG_ALRT = environ.get('MSG_ALRT', 'Share & Support Us ♥️')
-SUPPORT_CHAT = environ.get('SUPPORT_CHAT', 'https://t.me/') 
+SUPPORT_CHAT = environ.get('SUPPORT_CHAT', 'https://t.me/+4pPWKtxin2YyNTc1') 
 P_TTI_SHOW_OFF = is_enabled((environ.get('P_TTI_SHOW_OFF', "False")), False)
 IMDB = is_enabled((environ.get('IMDB', "False")), False)
 AUTO_FFILTER = is_enabled((environ.get('AUTO_FFILTER', "True")), True)
