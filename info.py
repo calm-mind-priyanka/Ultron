@@ -72,7 +72,7 @@ SHORTENER_API = environ.get("SHORTENER_API", "204bba345b04f7812f6de7e079f063d9ab
 SHORTENER_WEBSITE = environ.get("SHORTENER_WEBSITE", "https://arolinks.com")
 
 SHORTENER_API2 = environ.get("SHORTENER_API2", "e2239d738dd541fe55fe74ae6e00c782dc843715")
-SHORTENER_WEBSITE2 = environ.get("SHORTENER_WEBSITE2", "http://CPMShort.com")
+SHORTENER_WEBSITE2 = environ.get("SHORTENER_WEBSITE2", "https://CPMShort.com")
 
 SHORTENER_API3 = environ.get("SHORTENER_API3", "0eb911f6bd85416d49e665a10688d810bfd5154d")
 SHORTENER_WEBSITE3 = environ.get("SHORTENER_WEBSITE3", "https://linkshortify.com")
