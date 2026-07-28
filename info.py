@@ -42,13 +42,13 @@ REQST_CHANNEL = int(reqst_channel) if reqst_channel and id_pattern.search(reqst_
 support_chat_id = environ.get('SUPPORT_CHAT_ID', '-1002459015261') 
 SUPPORT_CHAT_ID = int(support_chat_id) if support_chat_id and id_pattern.search(support_chat_id) else None
 
-DATABASE_URI = environ.get('DATABASE_URI', "mongodb+srv://Vivekchaun24_23:SPNaSnJhXQ39ZMtg@cluster0.74vyoq2.mongodb.net/?appName=Cluster0")
+DATABASE_URI = environ.get('DATABASE_URI', "mongodb+srv://rajibchaun_db_user:Fa1SV672h6xrxFxR@cluster0.pfgtal2.mongodb.net/?appName=Cluster0")
 DATABASE_NAME = environ.get('DATABASE_NAME', "Cluster0")
 COLLECTION_NAME = environ.get('COLLECTION_NAME', 'Sandy_files')
 
 # If MULTIPLE_DB Is True Then Fill DATABASE_URI2 Value Else You Will Get Error.
 MULTIPLE_DB = is_enabled(os.environ.get('MULTIPLE_DB', "True"), True) # Type True For Turn On MULTIPLE DB FUNTION 
-DATABASE_URI2 = environ.get('DATABASE_URI2', "mongodb+srv://rajibchaun_db_user:Fa1SV672h6xrxFxR@cluster0.pfgtal2.mongodb.net/?appName=Cluster0")
+DATABASE_URI2 = environ.get('DATABASE_URI2', "mongodb+srv://Vivekchaun24_23:SPNaSnJhXQ39ZMtg@cluster0.74vyoq2.mongodb.net/?appName=Cluster0")
 DB_CHANGE_LIMIT = int(environ.get('DB_CHANGE_LIMIT', "432")) 
 
 GRP_LNK = environ.get('GRP_LNK', 'https://t.me/+bwi-Oeeg11g2ZmI1')
