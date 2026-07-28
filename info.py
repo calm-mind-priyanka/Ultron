@@ -52,7 +52,7 @@ DATABASE_URI2 = environ.get('DATABASE_URI2', "mongodb+srv://rajibchaun_db_user:F
 DB_CHANGE_LIMIT = int(environ.get('DB_CHANGE_LIMIT', "432")) 
 
 GRP_LNK = environ.get('GRP_LNK', 'https://t.me/+bwi-Oeeg11g2ZmI1')
-CHNL_LNK = environ.get('CHNL_LNK', https://t.me/+DiOcxJnNQXdmNDdl')
+CHNL_LNK = environ.get('CHNL_LNK', 'https://t.me/+DiOcxJnNQXdmNDdl')
 OWNER_LNK = environ.get('OWNER_LNK', 'https://t.me/Sandymaiwait')
 UPDATE_CHANNEL_LNK = environ.get('UPDATE_CHANNEL_LNK', 'https://t.me/+DiOcxJnNQXdmNDdl')
 
