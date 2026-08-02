@@ -552,7 +552,7 @@ async def shortener_menu_handler(client, query):
     text = f"<b>ꜱʜᴏʀᴛᴇɴᴇʀ {num} ꜱᴇᴛᴛɪɴɢꜱ:</b>\n\n🌐 ᴅᴏᴍᴀɪɴ: {current_url or 'ᴏᴛ ꜱᴇᴛ'}\n🔗 ᴀᴘɪ: {current_api or 'ɴᴏᴛ ꜱᴇᴛ'}"
     btn = [
         [InlineKeyboardButton("ꜱᴇᴛ", callback_data=f'set_verify{num}#{grp_id}')],
-        [InlineKeyboardButton('ᴇᴍᴏᴠᴇ', callback_data=f'rm_verify{num}#{grp_id}')],
+        [InlineKeyboardButton('ʀᴇᴍᴏᴠᴇ', callback_data=f'rm_verify{num}#{grp_id}')],
         [InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'changeshortner#{grp_id}')]
     ]
     try:
