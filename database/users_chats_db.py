@@ -1,6 +1,6 @@
 import motor.motor_asyncio
 from info import *  
-from datetime import timedelta
+from datetime import timedelta, timezone
 import time, datetime, pytz
 from pymongo.errors import DuplicateKeyError
 from pymongo import MongoClient
@@ -271,6 +271,10 @@ class Database:
             user = await self.get_notcopy_user(user_id)
             pastDate = user["last_verified"]
         ist_timezone = pytz.timezone('Asia/Kolkata')
+        
+        if pastDate.tzinfo is None:
+            pastDate = pytz.utc.localize(pastDate)
+            
         pastDate = pastDate.astimezone(ist_timezone)
         current_time = datetime.datetime.now(tz=ist_timezone)
         seconds_since_midnight = (current_time - datetime.datetime(current_time.year, current_time.month, current_time.day, 0, 0, 0, tzinfo=ist_timezone)).total_seconds()
@@ -286,6 +290,10 @@ class Database:
             user = await self.get_notcopy_user(user_id)
             pastDate = user["second_time_verified"]
         ist_timezone = pytz.timezone('Asia/Kolkata')
+        
+        if pastDate.tzinfo is None:
+            pastDate = pytz.utc.localize(pastDate)
+            
         pastDate = pastDate.astimezone(ist_timezone)
         current_time = datetime.datetime.now(tz=ist_timezone)
         seconds_since_midnight = (current_time - datetime.datetime(current_time.year, current_time.month, current_time.day, 0, 0, 0, tzinfo=ist_timezone)).total_seconds()
@@ -306,12 +314,18 @@ class Database:
                 user = await self.get_notcopy_user(user_id)
                 pastDate = user["last_verified"]
             ist_timezone = pytz.timezone('Asia/Kolkata')
+            
+            if pastDate.tzinfo is None:
+                pastDate = pytz.utc.localize(pastDate)
+                
             pastDate = pastDate.astimezone(ist_timezone)
             current_time = datetime.datetime.now(tz=ist_timezone)
             time_difference = current_time - pastDate
             if time_difference > datetime.timedelta(seconds=time):
-                pastDate = user["last_verified"].astimezone(ist_timezone)
-                second_time = user["second_time_verified"].astimezone(ist_timezone)
+                second_time = user["second_time_verified"]
+                if second_time.tzinfo is None:
+                    second_time = pytz.utc.localize(second_time)
+                second_time = second_time.astimezone(ist_timezone)
                 return second_time < pastDate
         return False
 
@@ -328,12 +342,18 @@ class Database:
                 user = await self.get_notcopy_user(user_id)
                 pastDate = user["second_time_verified"]
             ist_timezone = pytz.timezone('Asia/Kolkata')
+            
+            if pastDate.tzinfo is None:
+                pastDate = pytz.utc.localize(pastDate)
+                
             pastDate = pastDate.astimezone(ist_timezone)
             current_time = datetime.datetime.now(tz=ist_timezone)
             time_difference = current_time - pastDate
             if time_difference > datetime.timedelta(seconds=time):
-                pastDate = user["second_time_verified"].astimezone(ist_timezone)
-                second_time = user["third_time_verified"].astimezone(ist_timezone)
+                second_time = user["third_time_verified"]
+                if second_time.tzinfo is None:
+                    second_time = pytz.utc.localize(second_time)
+                second_time = second_time.astimezone(ist_timezone)
                 return second_time < pastDate
         return False
    
@@ -361,13 +381,20 @@ class Database:
             expiry_time = user_data.get("expiry_time")
             if expiry_time is None:
                 return False
-            elif isinstance(expiry_time, datetime.datetime) and datetime.datetime.now() <= expiry_time:
-                return True
-            else:
-                try:
-                    await self.users.update_one({"id": user_id}, {"$set": {"expiry_time": None}})
-                except Exception:
-                    pass
+            elif isinstance(expiry_time, datetime.datetime):
+                # Ensure UTC awareness for clean comparison
+                if expiry_time.tzinfo is None:
+                    expiry_time = pytz.utc.localize(expiry_time)
+                
+                now = datetime.datetime.now(timezone.utc)
+                if now <= expiry_time:
+                    return True
+                else:
+                    # Expired, reset expiry time in DB
+                    try:
+                        await self.users.update_one({"id": user_id}, {"$set": {"expiry_time": None}})
+                    except Exception:
+                        pass
         return False
 
     async def update_one(self, filter_query, update_data):
@@ -389,7 +416,7 @@ class Database:
     # Premium expired reminder
     async def get_expiring_soon(self, label, delta):
         reminder_key = f"reminder_{label}_sent"
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(timezone.utc)
         target_time = now + delta
         window = timedelta(seconds=30)
 
@@ -426,17 +453,17 @@ class Database:
 
     async def give_free_trial(self, user_id):
         try:
-            user_id = user_id
-            seconds = 5*60         
-            expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+            seconds = 5 * 60         
+            expiry_time = datetime.datetime.now(timezone.utc) + datetime.timedelta(seconds=seconds)
             user_data = {"id": user_id, "expiry_time": expiry_time, "has_free_trial": True}
             await self.users.update_one({"id": user_id}, {"$set": user_data}, upsert=True)
         except Exception:
             pass
 
     async def all_premium_users(self):
+        now = datetime.datetime.now(timezone.utc)
         count = await self.users.count_documents({
-        "expiry_time": {"$gt": datetime.datetime.now()}
+            "expiry_time": {"$gt": now}
         })
         return count
     
