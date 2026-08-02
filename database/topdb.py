@@ -5,8 +5,8 @@ from datetime import datetime
 
 class Database:
     def __init__(self, uri, db_name):
-        # Fall back to DATABASE_URI2 if URI is not provided
-        target_uri = DATABASE_URI2 if DATABASE_URI2 else uri
+        # Use passed uri first, fall back to DATABASE_URI2 if uri is None or empty
+        target_uri = uri if uri else DATABASE_URI2
         self.client = AsyncIOMotorClient(target_uri)
         self.db = self.client[db_name]
         self.col = self.db.user        
@@ -27,8 +27,7 @@ class Database:
                     {"$inc": {"messages.$.count": 1}}
                 )
         except Exception:
-            # If the database is full or throws a write error, 
-            # ignore it so movie searching keeps working cleanly!
+            # Ignore write errors so search operations are never interrupted
             pass
 
     async def get_top_messages(self, limit=30):
@@ -40,7 +39,7 @@ class Database:
                 {"$limit": limit}
             ]
             results = await self.col.aggregate(pipeline).to_list(length=limit)
-            return [result['_id'] for result in results]
+            return [result['_id'] for result in results if '_id' in result]
         except Exception:
             return []
     
@@ -50,6 +49,6 @@ class Database:
         except Exception:
             pass
 
-# Connect topdb directly to DATABASE_URI2 if available, or fallback to DATABASE_URI
+# Connect silentdb directly to DATABASE_URI2 if available, or fallback to DATABASE_URI
 db_target = DATABASE_URI2 if DATABASE_URI2 else DATABASE_URI
 silentdb = Database(db_target, "SilentXBotz")
