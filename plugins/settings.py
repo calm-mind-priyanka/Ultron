@@ -20,9 +20,8 @@ async def get_invite_link(client, grp_id):
 
 async def group_setting_buttons(grp_id):
     settings = await get_settings(grp_id)
-    buttons = [[
-        InlineKeyboardButton('📚 ʀᴇꜱᴜʟᴛ ᴍᴏᴅᴇ', callback_data=f'setgs#button#{settings.get("button")}#{grp_id}'),
-        InlineKeyboardButton('ʙᴜᴛᴛᴏɴ' if settings.get("button") else 'ᴛᴇxᴛ', callback_data=f'setgs#button#{settings.get("button")}#{grp_id}'),
+        buttons = [[
+        InlineKeyboardButton('📚 ʀᴇꜱᴜʟᴛ ᴍᴏᴅᴇ', callback_data=f'result_mode_setgs#{grp_id}'),
     ],[
         InlineKeyboardButton('🗂 ꜰɪʟᴇꜱ ꜱᴇᴄᴜʀᴇ', callback_data=f'setgs#file_secure#{settings["file_secure"]}#{grp_id}'),
         InlineKeyboardButton('ᴇɴᴀʙʟᴇ' if settings["file_secure"] else 'ᴅɪꜱᴀʙʟᴇ', callback_data=f'setgs#file_secure#{settings["file_secure"]}#{grp_id}'),
