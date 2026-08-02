@@ -1,9 +1,9 @@
 import asyncio
-from pyrogram import Client, filters
+from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.errors import FloodWait, MessageNotModified
-from utils import get_settings, save_group_settings, is_check_admin
-import info  # Updated to match your info.py file
+from pyrogram.errors import MessageNotModified, FloodWait
+from info import *
+from utils import get_settings, save_group_settings, MAX_B_TN, is_check_admin
 
 @Client.on_callback_query(filters.regex(r'^max_result_menu'))
 async def max_result_menu_handler(client, query):
@@ -14,28 +14,33 @@ async def max_result_menu_handler(client, query):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
 
     settings = await get_settings(int(grp_id))
-    current_max = int(settings.get("max_btn", 10))
-
-    btn_8_text = "✅ 8 Results" if current_max == 8 else "8 Results"
-    btn_10_text = "✅ 10 Results" if current_max == 10 else "10 Results"
-
-    btn = [
-        [
-            InlineKeyboardButton(btn_8_text, callback_data=f'set_max_val#8#{grp_id}'),
-            InlineKeyboardButton(btn_10_text, callback_data=f'set_max_val#10#{grp_id}')
-        ],
-        [
-            InlineKeyboardButton("<< ʙᴀᴄᴋ", callback_data=f'grp_pm#{grp_id}')
-        ]
-    ]
+    max_btn = settings.get("max_btn", False)
+    
+    # Text status representation
+    status_text = "10" if max_btn else f"{MAX_B_TN} (Default)"
 
     text = (
         "<b>ℹ️ ᴍᴀx ʀᴇꜱᴜʟᴛꜱ ꜱᴇᴛᴛɪɴɢꜱ\n\n"
-        "ᴄʜᴏᴏꜱᴇ ʜᴏᴡ ᴍᴀɴʏ ʀᴇꜱᴜʟᴛꜱ (ʙᴜᴛᴛᴏɴꜱ) ᴛʜᴇ ʙᴏᴛ ꜱʜᴏᴜʟᴅ "
-        "ꜱʜᴏᴡ ᴡʜᴇɴ ᴀ ᴜꜱᴇʀ ꜱᴇᴀʀᴄʜᴇꜱ ꜰᴏʀ ᴀ ᴍᴏᴠɪᴇ/ꜰɪʟᴇ.\n\n"
-        f"ᴄᴜʀʀᴇɴᴛ ꜱᴇʟᴇᴄᴛɪᴏɴ: <code>{current_max}</code>\n\n"
-        "<i>ᴄʟɪᴄᴋ ᴀɴ ᴏᴘᴛɪᴏɴ ʙᴇʟᴏᴡ ᴛᴏ ꜱᴇᴛ ɪᴛ.</i></b>"
+        "ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴄʜᴀɴɢᴇ ᴛʜᴇ ᴍᴀxɪᴍᴜᴍ ʀᴇꜱᴜʟᴛꜱ / ʙᴜᴛᴛᴏɴꜱ "
+        "ᴅɪꜱᴘʟᴀʏᴇᴅ ᴘᴇʀ ᴘᴀɢᴇ ɪɴ ꜱᴇᴀʀᴄʜ.\n\n"
+        f"ᴄᴜʀʀᴇɴᴛ ᴍᴀx ʙᴜᴛᴛᴏɴꜱ: <code>{status_text}</code></b>"
     )
+
+    btn = [
+        [
+            InlineKeyboardButton(
+                '✅ 10' if max_btn else '10', 
+                callback_data=f'setgs#max_btn#True#{grp_id}'
+            ),
+            InlineKeyboardButton(
+                f'✅ {MAX_B_TN}' if not max_btn else f'{MAX_B_TN}', 
+                callback_data=f'setgs#max_btn#False#{grp_id}'
+            )
+        ],
+        [
+            InlineKeyboardButton('<< ʙᴀᴄᴋ', callback_data=f'grp_pm#{grp_id}')
+        ]
+    ]
 
     try:
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
@@ -44,29 +49,3 @@ async def max_result_menu_handler(client, query):
         await query.message.edit(text, reply_markup=InlineKeyboardMarkup(btn))
     except MessageNotModified:
         pass
-
-
-@Client.on_callback_query(filters.regex(r'^set_max_val'))
-async def set_max_val_handler(client, query):
-    _, val, grp_id = query.data.split("#")
-    user_id = query.from_user.id if query.from_user else None
-    
-    if not await is_check_admin(client, int(grp_id), user_id):
-        return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
-
-    new_val = int(val)
-    
-    # 1. Save to database
-    await save_group_settings(int(grp_id), "max_btn", new_val)
-    
-    # 2. Update info.MAX_B_TN instantly in memory
-    try:
-        info.MAX_B_TN = str(new_val)
-    except AttributeError:
-        pass
-        
-    await query.answer(f"ᴍᴀx ʀᴇꜱᴜʟᴛꜱ ꜱᴇᴛ ᴛᴏ {new_val} ✅", show_alert=True)
-    
-    # 3. Refresh menu UI
-    query.data = f'max_result_menu#{grp_id}'
-    await max_result_menu_handler(client, query)
