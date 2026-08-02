@@ -12,7 +12,7 @@ class Database:
         self.db = self._client[database_name]
         self.col = self.db.users
         self.grp = self.db.groups
-        self.users = self.db.uersz  # Ensure your admin commands also use db.users!
+        self.users = self.db.uersz  # Ensure admin commands also use db.users!
         self.botcol = self.db.bot_settings
         self.misc = self.db.misc
         self.verify_id = self.db.verify_id 
@@ -21,22 +21,30 @@ class Database:
 
     async def find_join_req(self, id, chnl):
         chnl = str(chnl)
-        return bool(await self.db.request[chnl].find_one({'id': int(id)})) 
+        res = await self.db.request[chnl].find_one({'id': int(id)})
+        if not res and 'db2' in globals():
+            res = await db2.db.request[chnl].find_one({'id': int(id)})
+        return bool(res)
      
     async def add_join_req(self, id, chnl):
+        chnl = str(chnl)
         try:
-            chnl = str(chnl)
             await self.db.request[chnl].insert_one({'id': int(id)})
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    await db2.db.request[chnl].insert_one({'id': int(id)})
+                except Exception:
+                    pass
 
     async def del_join_req(self):
         if AUTH_REQ_CHANNEL:
             for c in AUTH_REQ_CHANNEL:
                 try:
                     c = str(c)
-                    result = await self.db.request[c].delete_many({})
-                    LOGGER.info(f"Deleted {result.deleted_count} requests from {c}")
+                    await self.db.request[c].delete_many({})
+                    if 'db2' in globals():
+                        await db2.db.request[c].delete_many({})
                 except Exception:
                     pass
 
@@ -61,46 +69,58 @@ class Database:
         )
     
     async def add_user(self, id, name):
+        user = self.new_user(id, name)
         try:
-            user = self.new_user(id, name)
             await self.col.insert_one(user)
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    await db2.col.insert_one(user)
+                except Exception:
+                    pass
     
     async def is_user_exist(self, id):
         user = await self.col.find_one({'id': int(id)})
+        if not user and 'db2' in globals():
+            user = await db2.col.find_one({'id': int(id)})
         return bool(user)
     
     async def total_users_count(self):
         count = await self.col.count_documents({})
+        if 'db2' in globals():
+            count += await db2.col.count_documents({})
         return count
     
     async def remove_ban(self, id):
         try:
-            ban_status = dict(
-                is_banned=False,
-                ban_reason=''
-            )
+            ban_status = dict(is_banned=False, ban_reason='')
             await self.col.update_one({'id': int(id)}, {'$set': {'ban_status': ban_status}})
         except Exception:
             pass
+        if 'db2' in globals():
+            try:
+                ban_status = dict(is_banned=False, ban_reason='')
+                await db2.col.update_one({'id': int(id)}, {'$set': {'ban_status': ban_status}})
+            except Exception:
+                pass
     
     async def ban_user(self, user_id, ban_reason="No Reason"):
+        ban_status = dict(is_banned=True, ban_reason=ban_reason)
         try:
-            ban_status = dict(
-                is_banned=True,
-                ban_reason=ban_reason
-            )
             await self.col.update_one({'id': int(user_id)}, {'$set': {'ban_status': ban_status}})
         except Exception:
             pass
+        if 'db2' in globals():
+            try:
+                await db2.col.update_one({'id': int(user_id)}, {'$set': {'ban_status': ban_status}})
+            except Exception:
+                pass
 
     async def get_ban_status(self, id):
-        default = dict(
-            is_banned=False,
-            ban_reason=''
-        )
+        default = dict(is_banned=False, ban_reason='')
         user = await self.col.find_one({'id': int(id)})
+        if not user and 'db2' in globals():
+            user = await db2.col.find_one({'id': int(id)})
         if not user:
             return default
         return user.get('ban_status', default)
@@ -113,12 +133,22 @@ class Database:
             await self.col.delete_many({'id': int(user_id)})
         except Exception:
             pass
+        if 'db2' in globals():
+            try:
+                await db2.col.delete_many({'id': int(user_id)})
+            except Exception:
+                pass
         
     async def delete_chat(self, id):
         try:
             await self.grp.delete_many({'id': int(id)})    
         except Exception:
             pass
+        if 'db2' in globals():
+            try:
+                await db2.grp.delete_many({'id': int(id)})
+            except Exception:
+                pass
 
     async def get_banned(self):
         users = self.col.find({'ban_status.is_banned': True})
@@ -128,31 +158,43 @@ class Database:
         return b_users, b_chats
     
     async def add_chat(self, chat, title):
+        chat_data = self.new_group(chat, title)
         try:
-            chat_data = self.new_group(chat, title)
             await self.grp.update_one({'id': int(chat)}, {'$set': chat_data}, upsert=True)
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    await db2.grp.update_one({'id': int(chat)}, {'$set': chat_data}, upsert=True)
+                except Exception:
+                    pass
     
     async def get_chat(self, chat):
-        chat = await self.grp.find_one({'id': int(chat)})
-        return False if not chat else chat.get('chat_status')
+        chat_doc = await self.grp.find_one({'id': int(chat)})
+        if not chat_doc and 'db2' in globals():
+            chat_doc = await db2.grp.find_one({'id': int(chat)})
+        return False if not chat_doc else chat_doc.get('chat_status')
     
     async def re_enable_chat(self, id):
+        chat_status=dict(is_disabled=False, reason="")
         try:
-            chat_status=dict(
-                is_disabled=False,
-                reason="",
-                )
             await self.grp.update_one({'id': int(id)}, {'$set': {'chat_status': chat_status}})
         except Exception:
             pass
+        if 'db2' in globals():
+            try:
+                await db2.grp.update_one({'id': int(id)}, {'$set': {'chat_status': chat_status}})
+            except Exception:
+                pass
         
     async def update_settings(self, id, settings):
         try:
             await self.grp.update_one({'id': int(id)}, {'$set': {'settings': settings}}, upsert=True)
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    await db2.grp.update_one({'id': int(id)}, {'$set': {'settings': settings}}, upsert=True)
+                except Exception:
+                    pass
             
     async def get_settings(self, id):
         default = {
@@ -184,6 +226,9 @@ class Database:
             'fsub_id': AUTH_CHANNEL
         }
         chat = await self.grp.find_one({'id': int(id)})
+        if not chat and 'db2' in globals():
+            chat = await db2.grp.find_one({'id': int(id)})
+            
         if chat and 'settings' in chat:
             return {**default, **chat['settings']}
         else:
@@ -194,31 +239,36 @@ class Database:
             await self.grp.update_one({'id': int(id)}, {'$unset': {f'settings.{key}': ""}})
         except Exception:
             pass
+        if 'db2' in globals():
+            try:
+                await db2.grp.update_one({'id': int(id)}, {'$unset': {f'settings.{key}': ""}})
+            except Exception:
+                pass
 
     async def silentx_reset_settings(self):
         try:
-            result = await self.grp.update_many(
-                {'settings': {'$exists': True}},
-                {'$unset': {'settings': ''}}
-            )
-            modified_count = result.modified_count
-            return modified_count
+            result = await self.grp.update_many({'settings': {'$exists': True}}, {'$unset': {'settings': ''}})
+            return result.modified_count
         except Exception as e:
             LOGGER.error(f"Error deleting settings for all groups: {str(e)}")
             raise
             
     async def disable_chat(self, chat, reason="No Reason"):
+        chat_status=dict(is_disabled=True, reason=reason)
         try:
-            chat_status=dict(
-                is_disabled=True,
-                reason=reason,
-                )
             await self.grp.update_one({'id': int(chat)}, {'$set': {'chat_status': chat_status}})
         except Exception:
             pass
+        if 'db2' in globals():
+            try:
+                await db2.grp.update_one({'id': int(chat)}, {'$set': {'chat_status': chat_status}})
+            except Exception:
+                pass
 
     async def total_chat_count(self):
         count = await self.grp.count_documents({})
+        if 'db2' in globals():
+            count += await db2.grp.count_documents({})
         return count
     
     async def get_all_chats(self):
@@ -228,19 +278,47 @@ class Database:
         return (await self.db.command("dbstats"))['dataSize']
 
     async def get_user(self, user_id):
-        user_data = await self.users.find_one({"id": int(user_id)})  # 👈 FIXED: Force int(user_id)
-        return user_data
-        
-    async def update_user(self, user_data):
+        user_id = int(user_id)
+        # Try DB1 first
         try:
-            user_data["id"] = int(user_data["id"])  # 👈 FIXED: Force int(user_id)
-            await self.users.update_one({"id": user_data["id"]}, {"$set": user_data}, upsert=True)
+            user_data = await self.users.find_one({"id": user_id})
+            if user_data:
+                return user_data
         except Exception:
             pass
+            
+        # Check DB2 if DB1 yielded nothing or failed
+        if 'db2' in globals():
+            try:
+                return await db2.users.find_one({"id": user_id})
+            except Exception:
+                pass
+        return None
+        
+    async def update_user(self, user_data):
+        user_data["id"] = int(user_data["id"])
+        # Try DB1
+        try:
+            await self.users.update_one({"id": user_data["id"]}, {"$set": user_data}, upsert=True)
+            return True
+        except Exception:
+            pass
+            
+        # Fallback write to DB2 if DB1 is full/failed
+        if 'db2' in globals():
+            try:
+                await db2.users.update_one({"id": user_data["id"]}, {"$set": user_data}, upsert=True)
+                return True
+            except Exception:
+                pass
+        return False
 
     async def get_notcopy_user(self, user_id):
         user_id = int(user_id)
         user = await self.misc.find_one({"user_id": user_id})
+        if not user and 'db2' in globals():
+            user = await db2.misc.find_one({"user_id": user_id})
+
         ist_timezone = pytz.timezone('Asia/Kolkata')
         if not user:
             res = {
@@ -249,9 +327,13 @@ class Database:
                 "second_time_verified": datetime.datetime(2019, 5, 17, 0, 0, 0, tzinfo=ist_timezone),
             }
             try:
-                user = await self.misc.insert_one(res)
+                await self.misc.insert_one(res)
             except Exception:
-                pass
+                if 'db2' in globals():
+                    try:
+                        await db2.misc.insert_one(res)
+                    except Exception:
+                        pass
             return res
         return user
 
@@ -262,7 +344,11 @@ class Database:
         try:
             return await self.misc.update_one(myquery, newvalues)
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    return await db2.misc.update_one(myquery, newvalues)
+                except Exception:
+                    pass
 
     async def is_user_verified(self, user_id):
         user = await self.get_notcopy_user(user_id)
@@ -359,25 +445,36 @@ class Database:
         return False
    
     async def create_verify_id(self, user_id: int, hash):
+        res = {"user_id": int(user_id), "hash": hash, "verified": False}
         try:
-            res = {"user_id": int(user_id), "hash": hash, "verified": False}
             return await self.verify_id.insert_one(res)
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    return await db2.verify_id.insert_one(res)
+                except Exception:
+                    pass
 
     async def get_verify_id_info(self, user_id: int, hash):
-        return await self.verify_id.find_one({"user_id": int(user_id), "hash": hash})
+        res = await self.verify_id.find_one({"user_id": int(user_id), "hash": hash})
+        if not res and 'db2' in globals():
+            res = await db2.verify_id.find_one({"user_id": int(user_id), "hash": hash})
+        return res
 
     async def update_verify_id_info(self, user_id, hash, value: dict):
+        myquery = {"user_id": int(user_id), "hash": hash}
+        newvalues = { "$set": value }
         try:
-            myquery = {"user_id": int(user_id), "hash": hash}
-            newvalues = { "$set": value }
             return await self.verify_id.update_one(myquery, newvalues)
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    return await db2.verify_id.update_one(myquery, newvalues)
+                except Exception:
+                    pass
         
     async def has_premium_access(self, user_id):
-        user_id = int(user_id)  # 👈 FIXED: Force int(user_id)
+        user_id = int(user_id)
         user_data = await self.get_user(user_id)
         if user_data:
             expiry_time = user_data.get("expiry_time")
@@ -391,17 +488,25 @@ class Database:
                 if now <= expiry_time:
                     return True
                 else:
-                    # Expired, reset expiry time in DB
                     try:
                         await self.users.update_one({"id": user_id}, {"$set": {"expiry_time": None}})
                     except Exception:
-                        pass
+                        if 'db2' in globals():
+                            try:
+                                await db2.users.update_one({"id": user_id}, {"$set": {"expiry_time": None}})
+                            except Exception:
+                                pass
         return False
 
     async def update_one(self, filter_query, update_data):
         try:
             return await self.users.update_one(filter_query, update_data)
         except Exception as e:
+            if 'db2' in globals():
+                try:
+                    return await db2.users.update_one(filter_query, update_data)
+                except Exception:
+                    pass
             LOGGER.error(f"Error updating document: {e}")
             return False
             
@@ -410,6 +515,10 @@ class Database:
         cursor = self.users.find({"expiry_time": {"$lt": current_time}})
         async for user in cursor:
             expired_users.append(user)
+        if 'db2' in globals():
+            cursor2 = db2.users.find({"expiry_time": {"$lt": current_time}})
+            async for user in cursor2:
+                expired_users.append(user)
         return expired_users
 
     async def get_expiring_soon(self, label, delta):
@@ -434,7 +543,13 @@ class Database:
                     {"id": int(user["id"])}, {"$set": {reminder_key: True}}
                 )
             except Exception:
-                pass
+                if 'db2' in globals():
+                    try:
+                        await db2.users.update_one(
+                            {"id": int(user["id"])}, {"$set": {reminder_key: True}}
+                        )
+                    except Exception:
+                        pass
 
         return reminder_users
 
@@ -452,40 +567,46 @@ class Database:
         return False
 
     async def give_free_trial(self, user_id):
+        user_id = int(user_id)
+        seconds = 5 * 60         
+        expiry_time = datetime.datetime.now(timezone.utc) + datetime.timedelta(seconds=seconds)
+        user_data = {"id": user_id, "expiry_time": expiry_time, "has_free_trial": True}
         try:
-            user_id = int(user_id)
-            seconds = 5 * 60         
-            expiry_time = datetime.datetime.now(timezone.utc) + datetime.timedelta(seconds=seconds)
-            user_data = {"id": user_id, "expiry_time": expiry_time, "has_free_trial": True}
             await self.users.update_one({"id": user_id}, {"$set": user_data}, upsert=True)
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    await db2.users.update_one({"id": user_id}, {"$set": user_data}, upsert=True)
+                except Exception:
+                    pass
 
     async def all_premium_users(self):
         now = datetime.datetime.now(timezone.utc)
-        count = await self.users.count_documents({
-            "expiry_time": {"$gt": now}
-        })
+        count = await self.users.count_documents({"expiry_time": {"$gt": now}})
+        if 'db2' in globals():
+            count += await db2.users.count_documents({"expiry_time": {"$gt": now}})
         return count
     
     async def get_bot_setting(self, bot_id, setting_key, default_value):
         bot = await self.botcol.find_one({'id': int(bot_id)}, {setting_key: 1, '_id': 0})
+        if not bot and 'db2' in globals():
+            bot = await db2.botcol.find_one({'id': int(bot_id)}, {setting_key: 1, '_id': 0})
         return bot[setting_key] if bot and setting_key in bot else default_value
         
     async def update_bot_setting(self, bot_id, setting_key, value):
         try:
-            await self.botcol.update_one(
-                {'id': int(bot_id)}, 
-                {'$set': {setting_key: value}}, 
-                upsert=True
-            )
+            await self.botcol.update_one({'id': int(bot_id)}, {'$set': {setting_key: value}}, upsert=True)
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    await db2.botcol.update_one({'id': int(bot_id)}, {'$set': {setting_key: value}}, upsert=True)
+                except Exception:
+                    pass
 
     async def connect_group(self, group_id, user_id):
+        group_id = int(group_id)
+        user_id = int(user_id)
         try:
-            group_id = int(group_id)
-            user_id = int(user_id)
             user = await self.connection.find_one({'_id': user_id})
             if user:
                 if group_id not in user["group_ids"]:
@@ -493,10 +614,21 @@ class Database:
             else:
                 await self.connection.insert_one({'_id': user_id, 'group_ids': [group_id]})
         except Exception:
-            pass
+            if 'db2' in globals():
+                try:
+                    user2 = await db2.connection.find_one({'_id': user_id})
+                    if user2:
+                        if group_id not in user2["group_ids"]:
+                            await db2.connection.update_one({'_id': user_id}, {"$push": {"group_ids": group_id}})
+                    else:
+                        await db2.connection.insert_one({'_id': user_id, 'group_ids': [group_id]})
+                except Exception:
+                    pass
 
     async def get_connected_grps(self, user_id):
         user = await self.connection.find_one({'_id': int(user_id)})
+        if not user and 'db2' in globals():
+            user = await db2.connection.find_one({'_id': int(user_id)})
         if user:
             return user["group_ids"]
         else:
