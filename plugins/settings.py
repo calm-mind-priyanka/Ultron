@@ -24,7 +24,7 @@ async def group_setting_buttons(grp_id):
         InlineKeyboardButton('📚 ʀᴇꜱᴜʟᴛ ᴍᴏᴅᴇ', callback_data=f'result_mode_setgs#{grp_id}'),
         InlineKeyboardButton('🗂 ꜰɪʟᴇꜱ ꜱᴇᴄᴜʀᴇ', callback_data=f'file_secure_menu#{grp_id}')
     ],[
-        InlineKeyboardButton('🈵 ɪᴍᴅʙ ꜱᴇᴛᴛɪɴɢꜱ', callback_data=f'imdb_menu#{grp_id}'),
+        InlineKeyboardButton('🈵 ɪᴍᴅʙ', callback_data=f'imdb_menu#{grp_id}'),
         InlineKeyboardButton('ᴡᴇʟᴄᴏᴍᴇ ᴍꜱɢ', callback_data=f'welcome_menu#{grp_id}')
     ],[
         InlineKeyboardButton('🗑️ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ', callback_data=f'auto_delete_menu#{grp_id}'),
