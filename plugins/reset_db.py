@@ -1,10 +1,10 @@
 from pyrogram import Client, filters
-from database import db, db2
+from database.users_chats_db import db, db2
 from info import ADMINS
 
 @Client.on_message(filters.command("resetdb1") & filters.user(ADMINS))
 async def reset_db1_handler(client, message):
-    """Wipes ONLY the Primary Database (db)"""
+    """Wipes ONLY the Primary Database (db1)"""
     msg = await message.reply_text("⏳ **Wiping Primary Database (db1)... Please wait.**")
     try:
         cols = await db.db.list_collection_names()
