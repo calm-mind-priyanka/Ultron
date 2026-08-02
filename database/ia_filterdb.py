@@ -79,12 +79,12 @@ def get_regex_pattern(query):
 
 
 async def check_db_size(silentdb):
+    """Safely checks database size without caching failure values."""
     try:
         global _db_size_cache
         current_time = time.time()
         is_primary = False
 
-        # Identify if it's the primary DB
         if hasattr(silentdb, 'name') and silentdb.name == db.name:
             is_primary = True
         elif hasattr(silentdb, 'db') and silentdb.db.name == db.name:
@@ -108,9 +108,9 @@ async def check_db_size(silentdb):
             _db_size_cache['size'] = size
         return size
     except Exception as e:
-        LOGGER.error(f"Error checking DB size: {e}")
-        # Return infinity so code immediately routes to secondary DB if stats fail
-        return float('inf')
+        LOGGER.error(f"Error checking DB size (Primary DB may be full/quota restricted): {e}")
+        # Return DB_CHANGE_LIMIT + 1 so writes redirect to DB2 without caching this as permanent
+        return (DB_CHANGE_LIMIT * 1024 * 1024) + 1
 
 
 async def save_file(media) -> Tuple[bool, int]:
@@ -125,16 +125,18 @@ async def save_file(media) -> Tuple[bool, int]:
             if primary_db_size >= db_change_limit_bytes:
                 use_secondary = True
 
-        # Check existing records safely without locking up
-        if use_secondary:
-            exists = await Media2.find_one({'_id': file_id})
-            if not exists:
-                try:
-                    exists = await Media.find_one({'_id': file_id})
-                except Exception:
-                    exists = None
-        else:
+        # Check existing records across BOTH DBs to prevent duplicate entries anywhere
+        exists = None
+        try:
             exists = await Media.find_one({'_id': file_id})
+        except Exception as e:
+            LOGGER.warning(f"Primary DB duplicate check read error: {e}")
+
+        if not exists and MULTIPLE_DB:
+            try:
+                exists = await Media2.find_one({'_id': file_id})
+            except Exception as e:
+                LOGGER.warning(f"Secondary DB duplicate check read error: {e}")
 
         if exists:
             LOGGER.info(f'{file_name} Is Already Saved In Database!')
@@ -157,9 +159,9 @@ async def save_file(media) -> Tuple[bool, int]:
             LOGGER.info(f'{file_name} Saved Successfully In {"Secondary" if use_secondary else "Primary"} Database')
             return True, 1
         except (OperationFailure, PyMongoError) as db_err:
-            # Fallback trigger: If write fails on primary, switch automatically to secondary
+            # Fallback: If Primary DB write fails due to space/quota limits, save automatically to Secondary DB
             if not use_secondary and MULTIPLE_DB:
-                LOGGER.warning(f"Primary DB write failed ({db_err}). Auto-redirecting to Secondary DB...")
+                LOGGER.warning(f"Primary DB write rejected ({db_err}). Redirecting write to Secondary DB...")
                 file2 = Media2(
                     file_id=file_id,
                     file_ref=file_ref,
@@ -226,43 +228,39 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     count_db1 = 0
     count_db2 = 0
 
-    # Safely fetch from Primary DB first
+    # 1. READ FROM PRIMARY DB
     try:
-        cursor1 = Media.find(filter, projection).sort('$natural', -1).skip(offset).limit(max_results)
-        files = await cursor1.to_list(length=max_results)
         count_db1 = await Media.count_documents(filter)
+        if offset < count_db1:
+            cursor1 = Media.find(filter, projection).sort('$natural', -1).skip(offset).limit(max_results)
+            files = await cursor1.to_list(length=max_results)
     except Exception as e:
-        LOGGER.error(f"Primary DB search error: {e}")
+        LOGGER.error(f"Primary DB search read error: {e}")
         count_db1 = 0
 
-    if not MULTIPLE_DB:
-        total_results = count_db1 if len(files) >= max_results else len(files)
-    else:
-        # Safely fetch count from Secondary DB
+    # 2. READ FROM SECONDARY DB IF MULTIPLE_DB IS ACTIVE
+    if MULTIPLE_DB:
         try:
             count_db2 = await Media2.count_documents(filter)
         except Exception as e:
-            LOGGER.error(f"Secondary DB count error: {e}")
+            LOGGER.error(f"Secondary DB count read error: {e}")
             count_db2 = 0
 
-        total_results = count_db1 + count_db2
-
-        # Fetch remaining required files from DB2
-        if len(files) < max_results:
-            remaining_needed = max_results - len(files)
+        # Calculate exact fill requirement from DB2
+        needed_from_db2 = max_results - len(files)
+        if needed_from_db2 > 0:
             try:
-                if len(files) > 0:
-                    cursor2 = Media2.find(filter, projection).sort('$natural', -1).limit(remaining_needed)
-                    files2 = await cursor2.to_list(length=remaining_needed)
-                    files.extend(files2)
-                else:
-                    offset_db2 = max(0, offset - count_db1)
-                    cursor2 = Media2.find(filter, projection).sort('$natural', -1).skip(offset_db2).limit(max_results)
-                    files = await cursor2.to_list(length=max_results)
+                # Calculate proper offset skip for DB2
+                offset_db2 = max(0, offset - count_db1)
+                cursor2 = Media2.find(filter, projection).sort('$natural', -1).skip(offset_db2).limit(needed_from_db2)
+                files2 = await cursor2.to_list(length=needed_from_db2)
+                files.extend(files2)
             except Exception as e:
-                LOGGER.error(f"Secondary DB search error: {e}")
+                LOGGER.error(f"Secondary DB search read error: {e}")
 
+    total_results = count_db1 + count_db2
     next_offset = offset + len(files)
+
     if next_offset >= total_results or len(files) == 0:
         next_offset = 0
 
