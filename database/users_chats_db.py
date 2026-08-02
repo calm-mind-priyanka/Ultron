@@ -12,7 +12,7 @@ class Database:
         self.db = self._client[database_name]
         self.col = self.db.users
         self.grp = self.db.groups
-        self.users = self.db.uersz
+        self.users = self.db.uersz  # Ensure your admin commands also use db.users!
         self.botcol = self.db.bot_settings
         self.misc = self.db.misc
         self.verify_id = self.db.verify_id 
@@ -21,12 +21,12 @@ class Database:
 
     async def find_join_req(self, id, chnl):
         chnl = str(chnl)
-        return bool(await self.db.request[chnl].find_one({'id': id})) 
+        return bool(await self.db.request[chnl].find_one({'id': int(id)})) 
      
     async def add_join_req(self, id, chnl):
         try:
             chnl = str(chnl)
-            await self.db.request[chnl].insert_one({'id': id})
+            await self.db.request[chnl].insert_one({'id': int(id)})
         except Exception:
             pass
 
@@ -42,7 +42,7 @@ class Database:
 
     def new_user(self, id, name):
         return dict(
-            id = id,
+            id = int(id),
             name = name,
             ban_status=dict(
                 is_banned=False,
@@ -52,7 +52,7 @@ class Database:
 
     def new_group(self, id, title):
         return dict(
-            id = id,
+            id = int(id),
             title = title,
             chat_status=dict(
                 is_disabled=False,
@@ -68,7 +68,7 @@ class Database:
             pass
     
     async def is_user_exist(self, id):
-        user = await self.col.find_one({'id':int(id)})
+        user = await self.col.find_one({'id': int(id)})
         return bool(user)
     
     async def total_users_count(self):
@@ -81,7 +81,7 @@ class Database:
                 is_banned=False,
                 ban_reason=''
             )
-            await self.col.update_one({'id': id}, {'$set': {'ban_status': ban_status}})
+            await self.col.update_one({'id': int(id)}, {'$set': {'ban_status': ban_status}})
         except Exception:
             pass
     
@@ -91,7 +91,7 @@ class Database:
                 is_banned=True,
                 ban_reason=ban_reason
             )
-            await self.col.update_one({'id': user_id}, {'$set': {'ban_status': ban_status}})
+            await self.col.update_one({'id': int(user_id)}, {'$set': {'ban_status': ban_status}})
         except Exception:
             pass
 
@@ -100,7 +100,7 @@ class Database:
             is_banned=False,
             ban_reason=''
         )
-        user = await self.col.find_one({'id':int(id)})
+        user = await self.col.find_one({'id': int(id)})
         if not user:
             return default
         return user.get('ban_status', default)
@@ -135,7 +135,7 @@ class Database:
             pass
     
     async def get_chat(self, chat):
-        chat = await self.grp.find_one({'id':int(chat)})
+        chat = await self.grp.find_one({'id': int(chat)})
         return False if not chat else chat.get('chat_status')
     
     async def re_enable_chat(self, id):
@@ -183,7 +183,7 @@ class Database:
             'caption': CUSTOM_FILE_CAPTION,
             'fsub_id': AUTH_CHANNEL
         }
-        chat = await self.grp.find_one({'id':int(id)})
+        chat = await self.grp.find_one({'id': int(id)})
         if chat and 'settings' in chat:
             return {**default, **chat['settings']}
         else:
@@ -228,11 +228,12 @@ class Database:
         return (await self.db.command("dbstats"))['dataSize']
 
     async def get_user(self, user_id):
-        user_data = await self.users.find_one({"id": user_id})
+        user_data = await self.users.find_one({"id": int(user_id)})  # 👈 FIXED: Force int(user_id)
         return user_data
         
     async def update_user(self, user_data):
         try:
+            user_data["id"] = int(user_data["id"])  # 👈 FIXED: Force int(user_id)
             await self.users.update_one({"id": user_data["id"]}, {"$set": user_data}, upsert=True)
         except Exception:
             pass
@@ -359,30 +360,30 @@ class Database:
    
     async def create_verify_id(self, user_id: int, hash):
         try:
-            res = {"user_id": user_id, "hash":hash, "verified":False}
+            res = {"user_id": int(user_id), "hash": hash, "verified": False}
             return await self.verify_id.insert_one(res)
         except Exception:
             pass
 
     async def get_verify_id_info(self, user_id: int, hash):
-        return await self.verify_id.find_one({"user_id": user_id, "hash": hash})
+        return await self.verify_id.find_one({"user_id": int(user_id), "hash": hash})
 
     async def update_verify_id_info(self, user_id, hash, value: dict):
         try:
-            myquery = {"user_id": user_id, "hash": hash}
+            myquery = {"user_id": int(user_id), "hash": hash}
             newvalues = { "$set": value }
             return await self.verify_id.update_one(myquery, newvalues)
         except Exception:
             pass
         
     async def has_premium_access(self, user_id):
+        user_id = int(user_id)  # 👈 FIXED: Force int(user_id)
         user_data = await self.get_user(user_id)
         if user_data:
             expiry_time = user_data.get("expiry_time")
             if expiry_time is None:
                 return False
             elif isinstance(expiry_time, datetime.datetime):
-                # Ensure UTC awareness for clean comparison
                 if expiry_time.tzinfo is None:
                     expiry_time = pytz.utc.localize(expiry_time)
                 
@@ -399,13 +400,11 @@ class Database:
 
     async def update_one(self, filter_query, update_data):
         try:
-            result = await self.users.update_one(filter_query, update_data)
-            return result.matched_count == 1
+            return await self.users.update_one(filter_query, update_data)
         except Exception as e:
             LOGGER.error(f"Error updating document: {e}")
             return False
             
-    # Premium expired reminder
     async def get_expired(self, current_time):
         expired_users = []
         cursor = self.users.find({"expiry_time": {"$lt": current_time}})
@@ -413,7 +412,6 @@ class Database:
             expired_users.append(user)
         return expired_users
 
-    # Premium expired reminder
     async def get_expiring_soon(self, label, delta):
         reminder_key = f"reminder_{label}_sent"
         now = datetime.datetime.now(timezone.utc)
@@ -433,7 +431,7 @@ class Database:
             reminder_users.append(user)
             try:
                 await self.users.update_one(
-                    {"id": user["id"]}, {"$set": {reminder_key: True}}
+                    {"id": int(user["id"])}, {"$set": {reminder_key: True}}
                 )
             except Exception:
                 pass
@@ -441,11 +439,13 @@ class Database:
         return reminder_users
 
     async def remove_premium_access(self, user_id):
+        user_id = int(user_id)
         return await self.update_one(
             {"id": user_id}, {"$set": {"expiry_time": None}}
         )
 
     async def check_trial_status(self, user_id):
+        user_id = int(user_id)
         user_data = await self.get_user(user_id)
         if user_data:
             return user_data.get("has_free_trial", False)
@@ -453,6 +453,7 @@ class Database:
 
     async def give_free_trial(self, user_id):
         try:
+            user_id = int(user_id)
             seconds = 5 * 60         
             expiry_time = datetime.datetime.now(timezone.utc) + datetime.timedelta(seconds=seconds)
             user_data = {"id": user_id, "expiry_time": expiry_time, "has_free_trial": True}
@@ -483,6 +484,8 @@ class Database:
 
     async def connect_group(self, group_id, user_id):
         try:
+            group_id = int(group_id)
+            user_id = int(user_id)
             user = await self.connection.find_one({'_id': user_id})
             if user:
                 if group_id not in user["group_ids"]:
@@ -493,7 +496,7 @@ class Database:
             pass
 
     async def get_connected_grps(self, user_id):
-        user = await self.connection.find_one({'_id': user_id})
+        user = await self.connection.find_one({'_id': int(user_id)})
         if user:
             return user["group_ids"]
         else:
@@ -517,6 +520,5 @@ class Database:
     async def update_movie_update_status(self, bot_id, enable):
         await self.update_bot_setting(bot_id, 'MOVIE_UPDATE_NOTIFICATION', enable)
 
-        
 db = Database(DATABASE_URI, DATABASE_NAME)    
 db2 = Database(DATABASE_URI2, DATABASE_NAME)
