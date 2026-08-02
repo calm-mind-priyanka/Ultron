@@ -1,9 +1,8 @@
 import asyncio
-from pyrogram import Client, filters, enums
+from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, MessageNotModified
 from utils import get_settings, save_group_settings, is_check_admin
-from logging_helper import LOGGER
 
 @Client.on_callback_query(filters.regex(r'^max_result_menu'))
 async def max_result_menu_handler(client, query):
@@ -14,9 +13,8 @@ async def max_result_menu_handler(client, query):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
 
     settings = await get_settings(int(grp_id))
-    current_max = settings.get("max_btn", 10) # Default to 10 if not set
+    current_max = int(settings.get("max_btn", 10))
 
-    # Show checkmarks on whichever option is currently active
     btn_8_text = "✅ 8 Results" if current_max == 8 else "8 Results"
     btn_10_text = "✅ 10 Results" if current_max == 10 else "10 Results"
 
@@ -59,6 +57,5 @@ async def set_max_val_handler(client, query):
     await save_group_settings(int(grp_id), "max_btn", new_val)
     await query.answer(f"ᴍᴀx ʀᴇꜱᴜʟᴛꜱ ꜱᴇᴛ ᴛᴏ {new_val} ✅", show_alert=True)
     
-    # Refresh the menu to update the checkmark
     query.data = f'max_result_menu#{grp_id}'
     await max_result_menu_handler(client, query)
