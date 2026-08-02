@@ -28,7 +28,7 @@ async def imdb_settings_callback(client: Client, query: CallbackQuery):
 
     # Format status text & toggle button text
     status_text = "ᴏɴ ✅" if poster_status else "ᴏꜰꜰ ❌"
-    button_text = "OFF POSTER ❌" if poster_status else "ON POSTER 🟢"
+    button_text = "ᴏꜰꜰ ᴘᴏꜱᴛᴇʀ" if poster_status else "ᴏɴ ᴘᴏꜱᴛᴇʀ"
 
     # Settings Layout Message
     message_text = (
