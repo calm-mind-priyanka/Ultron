@@ -3,6 +3,7 @@ from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, MessageNotModified
 from utils import get_settings, save_group_settings, is_check_admin
+import info  # Updated to match your info.py file
 
 @Client.on_callback_query(filters.regex(r'^max_result_menu'))
 async def max_result_menu_handler(client, query):
@@ -54,8 +55,18 @@ async def set_max_val_handler(client, query):
         return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
 
     new_val = int(val)
+    
+    # 1. Save to database
     await save_group_settings(int(grp_id), "max_btn", new_val)
+    
+    # 2. Update info.MAX_B_TN instantly in memory
+    try:
+        info.MAX_B_TN = str(new_val)
+    except AttributeError:
+        pass
+        
     await query.answer(f"ᴍᴀx ʀᴇꜱᴜʟᴛꜱ ꜱᴇᴛ ᴛᴏ {new_val} ✅", show_alert=True)
     
+    # 3. Refresh menu UI
     query.data = f'max_result_menu#{grp_id}'
     await max_result_menu_handler(client, query)
