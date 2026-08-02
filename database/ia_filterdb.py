@@ -4,7 +4,7 @@ import re
 import base64
 from typing import Dict, List, Tuple, Optional
 from pyrogram.file_id import FileId
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, OperationFailure, PyMongoError
 from umongo import Instance, Document, fields
 from motor.motor_asyncio import AsyncIOMotorClient
 from marshmallow.exceptions import ValidationError
@@ -109,37 +109,40 @@ async def check_db_size(silentdb):
         return size
     except Exception as e:
         LOGGER.error(f"Error checking DB size: {e}")
-        return 0
-    
+        # Return infinity so code immediately routes to secondary DB if stats fail
+        return float('inf')
+
+
 async def save_file(media) -> Tuple[bool, int]:
     try:
         file_id, file_ref = unpack_new_file_id(media.file_id)
         file_name = clean_filename(media.file_name)
         use_secondary = False
-        saveMedia = Media
 
         if MULTIPLE_DB:
             primary_db_size = await check_db_size(db)
             db_change_limit_bytes = DB_CHANGE_LIMIT * 1024 * 1024
             if primary_db_size >= db_change_limit_bytes:
-                saveMedia = Media2
                 use_secondary = True
 
+        # Check existing records safely without locking up
         if use_secondary:
-            exists_in_primary, exists_in_secondary = await asyncio.gather(
-                Media.find_one({'_id': file_id}),
-                Media2.find_one({'_id': file_id})
-            )
-            if exists_in_primary or exists_in_secondary:
-                LOGGER.info(f'{file_name} Is Already Saved In Database!')
-                return False, 0
+            exists = await Media2.find_one({'_id': file_id})
+            if not exists:
+                try:
+                    exists = await Media.find_one({'_id': file_id})
+                except Exception:
+                    exists = None
         else:
             exists = await Media.find_one({'_id': file_id})
-            if exists:
-                LOGGER.info(f'{file_name} Is Already Saved In Primary Database!')
-                return False, 0
 
-        file = saveMedia(
+        if exists:
+            LOGGER.info(f'{file_name} Is Already Saved In Database!')
+            return False, 0
+
+        target_model = Media2 if use_secondary else Media
+
+        file = target_model(
             file_id=file_id,
             file_ref=file_ref,
             file_name=file_name,
@@ -148,19 +151,40 @@ async def save_file(media) -> Tuple[bool, int]:
             mime_type=media.mime_type,
             caption=media.caption.html if media.caption else None,
         )
-        await file.commit()
-        LOGGER.info(f'{file_name} Saved Successfully In {"Secondary" if use_secondary else "Primary"} Database')
-        return True, 1
+
+        try:
+            await file.commit()
+            LOGGER.info(f'{file_name} Saved Successfully In {"Secondary" if use_secondary else "Primary"} Database')
+            return True, 1
+        except (OperationFailure, PyMongoError) as db_err:
+            # Fallback trigger: If write fails on primary, switch automatically to secondary
+            if not use_secondary and MULTIPLE_DB:
+                LOGGER.warning(f"Primary DB write failed ({db_err}). Auto-redirecting to Secondary DB...")
+                file2 = Media2(
+                    file_id=file_id,
+                    file_ref=file_ref,
+                    file_name=file_name,
+                    file_size=media.file_size,
+                    file_type=media.file_type,
+                    mime_type=media.mime_type,
+                    caption=media.caption.html if media.caption else None,
+                )
+                await file2.commit()
+                LOGGER.info(f'{file_name} Saved Successfully In Secondary Database (Fallback)')
+                return True, 1
+            else:
+                raise db_err
+
     except ValidationError as e:
         LOGGER.error(f'Validation Error While Saving File: {e}')
         return False, 2
     except DuplicateKeyError:
-        LOGGER.info(f'{file_name} Is Already Saved In {"Secondary" if use_secondary else "Primary"} Database')
+        LOGGER.info(f'{file_name} Is Already Saved In Database')
         return False, 0
     except Exception as e:
         LOGGER.error(f"Unexpected error in save_file: {e}")
         return False, 3
-            
+
 
 async def get_search_results(chat_id, query, file_type=None, max_results=10, offset=0, filter=None) -> Tuple[List, int, int]:
     if chat_id is not None:
@@ -189,7 +213,6 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     if max_results % 2 != 0:
         max_results += 1
 
-    # Use field projection to reduce data transfer
     projection = {
         'file_name': 1,
         'file_size': 1,
@@ -199,39 +222,53 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
         '_id': 1
     }
 
-    cursor1 = Media.find(filter, projection).sort('$natural', -1).skip(offset).limit(max_results)
-    files = await cursor1.to_list(length=max_results)
-    total_results = 0
+    files = []
+    count_db1 = 0
+    count_db2 = 0
+
+    # Safely fetch from Primary DB first
+    try:
+        cursor1 = Media.find(filter, projection).sort('$natural', -1).skip(offset).limit(max_results)
+        files = await cursor1.to_list(length=max_results)
+        count_db1 = await Media.count_documents(filter)
+    except Exception as e:
+        LOGGER.error(f"Primary DB search error: {e}")
+        count_db1 = 0
 
     if not MULTIPLE_DB:
-        if offset == 0 and len(files) < max_results:
-            total_results = len(files)
-        else:
-            total_results = await Media.count_documents(filter)
+        total_results = count_db1 if len(files) >= max_results else len(files)
     else:
-        # Use asyncio.gather for concurrent counting
-        count_db1_task = Media.count_documents(filter)
-        count_db2_task = Media2.count_documents(filter)
-        count_db1, count_db2 = await asyncio.gather(count_db1_task, count_db2_task)
+        # Safely fetch count from Secondary DB
+        try:
+            count_db2 = await Media2.count_documents(filter)
+        except Exception as e:
+            LOGGER.error(f"Secondary DB count error: {e}")
+            count_db2 = 0
+
         total_results = count_db1 + count_db2
 
+        # Fetch remaining required files from DB2
         if len(files) < max_results:
             remaining_needed = max_results - len(files)
-            if len(files) > 0:
-                cursor2 = Media2.find(filter, projection).sort('$natural', -1).limit(remaining_needed)
-                files2 = await cursor2.to_list(length=remaining_needed)
-                files.extend(files2)
-            else:
-                if offset >= count_db1:
-                    offset_db2 = offset - count_db1
+            try:
+                if len(files) > 0:
+                    cursor2 = Media2.find(filter, projection).sort('$natural', -1).limit(remaining_needed)
+                    files2 = await cursor2.to_list(length=remaining_needed)
+                    files.extend(files2)
+                else:
+                    offset_db2 = max(0, offset - count_db1)
                     cursor2 = Media2.find(filter, projection).sort('$natural', -1).skip(offset_db2).limit(max_results)
                     files = await cursor2.to_list(length=max_results)
+            except Exception as e:
+                LOGGER.error(f"Secondary DB search error: {e}")
 
     next_offset = offset + len(files)
     if next_offset >= total_results or len(files) == 0:
         next_offset = 0
+
     return files, next_offset, total_results
-    
+
+
 async def get_bad_files(query, file_type=None):
     regex = get_regex_pattern(query)
     if not regex:
@@ -244,36 +281,48 @@ async def get_bad_files(query, file_type=None):
     if file_type:
         filter['file_type'] = file_type
 
+    files = []
     if MULTIPLE_DB:
-        # Fetch from both in parallel
-        async def fetch_all(media_class):
-            cursor = media_class.find(filter).sort('$natural', -1)
-            count = await media_class.count_documents(filter)
-            return await cursor.to_list(length=count)
+        async def fetch_db(media_class):
+            try:
+                cursor = media_class.find(filter).sort('$natural', -1)
+                count = await media_class.count_documents(filter)
+                return await cursor.to_list(length=count)
+            except Exception as e:
+                LOGGER.error(f"Error fetching bad files: {e}")
+                return []
 
-        files1_task = fetch_all(Media)
-        files2_task = fetch_all(Media2)
-        files1, files2 = await asyncio.gather(files1_task, files2_task)
+        files1, files2 = await asyncio.gather(fetch_db(Media), fetch_db(Media2))
         files = files1 + files2
     else:
-        cursor = Media.find(filter).sort('$natural', -1)
-        count = await Media.count_documents(filter)
-        files = await cursor.to_list(length=count)
+        try:
+            cursor = Media.find(filter).sort('$natural', -1)
+            count = await Media.count_documents(filter)
+            files = await cursor.to_list(length=count)
+        except Exception as e:
+            LOGGER.error(f"Error fetching bad files: {e}")
 
     return files, len(files)
-    
+
 
 async def get_file_details(query):
     filter = {'file_id': query}
     if MULTIPLE_DB:
-        result1, result2 = await asyncio.gather(
-            Media.find(filter).to_list(length=1),
-            Media2.find(filter).to_list(length=1)
-        )
+        async def fetch_one(media_class):
+            try:
+                return await media_class.find(filter).to_list(length=1)
+            except Exception:
+                return []
+
+        result1, result2 = await asyncio.gather(fetch_one(Media), fetch_one(Media2))
         return result1 if result1 else result2
     else:
-        cursor = Media.find(filter)
-        return await cursor.to_list(length=1)
+        try:
+            cursor = Media.find(filter)
+            return await cursor.to_list(length=1)
+        except Exception as e:
+            LOGGER.error(f"Error getting file details: {e}")
+            return []
 
 
 def encode_file_id(s: bytes) -> str:
@@ -313,11 +362,18 @@ async def siletxbotz_fetch_media(limit: int) -> List[dict]:
         if MULTIPLE_DB:
             half = limit // 2
             remainder = limit - half
-            results = await asyncio.gather(
-                Media.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(half).to_list(length=half),
-                Media2.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(remainder).to_list(length=remainder)
+            
+            async def safe_fetch(media_class, fetch_limit):
+                try:
+                    return await media_class.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(fetch_limit).to_list(length=fetch_limit)
+                except Exception:
+                    return []
+
+            res1, res2 = await asyncio.gather(
+                safe_fetch(Media, half),
+                safe_fetch(Media2, remainder)
             )
-            return results[0] + results[1]
+            return res1 + res2
 
         files = await Media.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(limit).to_list(length=limit)
         return files
