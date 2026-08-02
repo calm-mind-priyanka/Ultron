@@ -1,52 +1,71 @@
-from pyrogram import Client, filters
+import asyncio
+from pyrogram import Client, filters, enums
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
-# Import your database helper functions for settings (adjust imports based on your bot structure)
-from database.connections_mdb import save_group_settings, get_settings
+from pyrogram.errors import MessageNotModified, FloodWait
+from utils import get_settings, save_group_settings, is_check_admin
 
 
-@Client.on_callback_query(filters.regex(r'^imdb_menu#') | filters.regex(r'^toggle_imdb_poster#'))
+@Client.on_callback_query(filters.regex(r'^(imdb_menu|toggle_imdb_poster)#'))
 async def imdb_settings_callback(client: Client, query: CallbackQuery):
     data = query.data.split("#")
     action = data[0]
     grp_id = int(data[1])
+    user_id = query.from_user.id if query.from_user else None
+
+    # Check admin rights matching your other settings callbacks
+    if not await is_check_admin(client, grp_id, user_id):
+        return await query.answer("<b>ɴᴇᴇᴅ ᴛᴏ ʙᴇ ᴀᴅᴍɪɴ ᴛᴏ ᴜꜱᴇ ᴛʜɪꜱ ✅.</b>", show_alert=True)
 
     # Fetch current group settings from DB
     settings = await get_settings(grp_id)
     poster_status = settings.get("imdb", False)
 
-    # If the user clicked the toggle button (On Poster / Off Poster)
+    # Toggle IMDb poster setting if requested
     if action == "toggle_imdb_poster":
         poster_status = not poster_status
         await save_group_settings(grp_id, "imdb", poster_status)
-        await query.answer("IMDb Poster status updated!")
+        await query.answer("ɪᴍᴅʙ ᴘᴏsᴛᴇʀ sᴛᴀᴛᴜs ᴜᴘᴅᴀᴛᴇᴅ! ✅")
 
-    # Format status text
+    # Format status text & toggle button text
     status_text = "ᴏɴ ✅" if poster_status else "ᴏꜰꜰ ❌"
     button_text = "OFF POSTER ❌" if poster_status else "ON POSTER 🟢"
 
-    # Message text layout
+    # Settings Layout Message
     message_text = (
+        "<b>⚙️ ɪᴍᴅʙ sᴇᴛᴛɪɴɢs\n\n"
         "ʜᴇʀᴇ ʏᴏᴜ ᴄᴀɴ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ɢʀᴏᴜᴘ ɪᴍᴅʙ sᴇᴛᴛɪɴɢ.\n\n"
-        f"ɪᴍᴅʙ ᴘᴏsᴛᴇʀ - {status_text}\n\n"
-        "ɪᴍᴅʙ ᴛᴇᴍᴘʟᴀᴛᴇ -\n\n"
-        "🏷 ᴛɪᴛʟᴇ - {search}\n\n"
-        "📢 ʀᴇǫᴜᴇꜱᴛᴇᴅ ʙʏ - {mention}\n"
-        "♾️ ᴘᴏᴡᴇʀᴇᴅ ʙʏ - {group}"
+        f"ɪᴍᴅʙ ᴘᴏsᴛᴇʀ : {status_text}\n\n"
+        "ɪᴍᴅʙ ᴛᴇᴍᴘʟᴀᴛᴇ :\n"
+        "🏷 ᴛɪᴛʟᴇ - <code>{{search}}</code>\n"
+        "📢 ʀᴇǫᴜᴇꜱᴛᴇᴅ ʙʏ - <code>{{mention}}</code>\n"
+        "♾️ ᴘᴏᴡᴇʀᴇᴅ ʙʏ - <code>{{group}}</code></b>"
     )
 
-    # Sub-menu button layout
+    # Keyboard Layout
     keyboard = InlineKeyboardMarkup([
         [
             InlineKeyboardButton(button_text, callback_data=f"toggle_imdb_poster#{grp_id}")
         ],
         [
-            InlineKeyboardButton("« ʙᴀᴄᴋ", callback_data=f"option_setgs#{grp_id}")
+            InlineKeyboardButton("« ʙᴀᴄᴋ", callback_data=f"grp_pm#{grp_id}")
         ]
     ])
 
-    # Edit the message with updated status and buttons
-    await query.message.edit_text(
-        text=message_text,
-        reply_markup=keyboard,
-        disable_web_page_preview=True
-    )
+    # Edit message with error handling for Pyrogram
+    try:
+        await query.message.edit_text(
+            text=message_text,
+            reply_markup=keyboard,
+            disable_web_page_preview=True,
+            parse_mode=enums.ParseMode.HTML
+        )
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+        await query.message.edit_text(
+            text=message_text,
+            reply_markup=keyboard,
+            disable_web_page_preview=True,
+            parse_mode=enums.ParseMode.HTML
+        )
+    except MessageNotModified:
+        pass
