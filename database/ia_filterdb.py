@@ -65,12 +65,12 @@ def get_regex_pattern(query):
     if not query:
         raw_pattern = '.'
     elif ' ' not in query:
-        raw_pattern = r"(\b|[\.\+\-_])" + re.escape(query) + r"(\b|[\.\+\-_])"
+        raw_pattern = r"(^|[\s\.\+\-_\[\]\(\)])" + re.escape(query) + r"($|[\s\.\+\-_\[\]\(\)])"
     else:
         parts = query.split(' ')
         new_parts = []
         for part in parts:
-            new_parts.append(r"(\b|[\.\+\-_])" + re.escape(part) + r"(\b|[\.\+\-_])")
+            new_parts.append(r"(^|[\s\.\+\-_\[\]\(\)])" + re.escape(part) + r"($|[\s\.\+\-_\[\]\(\)])")
         raw_pattern = r".*[\s\.\+\-_()\[\]]".join(new_parts)
     try:
         return re.compile(raw_pattern, flags=re.IGNORECASE)
@@ -109,7 +109,6 @@ async def check_db_size(silentdb):
         return size
     except Exception as e:
         LOGGER.error(f"Error checking DB size (Primary DB may be full/quota restricted): {e}")
-        # Return DB_CHANGE_LIMIT + 1 so writes redirect to DB2 without caching this as permanent
         return (DB_CHANGE_LIMIT * 1024 * 1024) + 1
 
 
@@ -125,7 +124,7 @@ async def save_file(media) -> Tuple[bool, int]:
             if primary_db_size >= db_change_limit_bytes:
                 use_secondary = True
 
-        # Check existing records across BOTH DBs to prevent duplicate entries anywhere
+        # Check existing records across BOTH DBs to prevent duplicate entries
         exists = None
         try:
             exists = await Media.find_one({'_id': file_id})
@@ -159,7 +158,6 @@ async def save_file(media) -> Tuple[bool, int]:
             LOGGER.info(f'{file_name} Saved Successfully In {"Secondary" if use_secondary else "Primary"} Database')
             return True, 1
         except (OperationFailure, PyMongoError) as db_err:
-            # Fallback: If Primary DB write fails due to space/quota limits, save automatically to Secondary DB
             if not use_secondary and MULTIPLE_DB:
                 LOGGER.warning(f"Primary DB write rejected ({db_err}). Redirecting write to Secondary DB...")
                 file2 = Media2(
@@ -205,13 +203,18 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     if not regex:
         return [], 0, 0
 
-    if not isinstance(filter, dict):
+    # 👈 FIXED: Prevent mutating the passed dictionary
+    if filter is None or not isinstance(filter, dict):
         if USE_CAPTION_FILTER:
-            filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
+            search_filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
         else:
-            filter = {'file_name': regex}
+            search_filter = {'file_name': regex}
+    else:
+        search_filter = filter.copy()
+
     if file_type:
-        filter['file_type'] = file_type
+        search_filter['file_type'] = file_type
+
     if max_results % 2 != 0:
         max_results += 1
 
@@ -230,9 +233,9 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
 
     # 1. READ FROM PRIMARY DB
     try:
-        count_db1 = await Media.count_documents(filter)
+        count_db1 = await Media.count_documents(search_filter)
         if offset < count_db1:
-            cursor1 = Media.find(filter, projection).sort('$natural', -1).skip(offset).limit(max_results)
+            cursor1 = Media.find(search_filter, projection).sort('$natural', -1).skip(offset).limit(max_results)
             files = await cursor1.to_list(length=max_results)
     except Exception as e:
         LOGGER.error(f"Primary DB search read error: {e}")
@@ -241,18 +244,16 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     # 2. READ FROM SECONDARY DB IF MULTIPLE_DB IS ACTIVE
     if MULTIPLE_DB:
         try:
-            count_db2 = await Media2.count_documents(filter)
+            count_db2 = await Media2.count_documents(search_filter)
         except Exception as e:
             LOGGER.error(f"Secondary DB count read error: {e}")
             count_db2 = 0
 
-        # Calculate exact fill requirement from DB2
         needed_from_db2 = max_results - len(files)
         if needed_from_db2 > 0:
             try:
-                # Calculate proper offset skip for DB2
                 offset_db2 = max(0, offset - count_db1)
-                cursor2 = Media2.find(filter, projection).sort('$natural', -1).skip(offset_db2).limit(needed_from_db2)
+                cursor2 = Media2.find(search_filter, projection).sort('$natural', -1).skip(offset_db2).limit(needed_from_db2)
                 files2 = await cursor2.to_list(length=needed_from_db2)
                 files.extend(files2)
             except Exception as e:
@@ -273,18 +274,18 @@ async def get_bad_files(query, file_type=None):
         return [], 0
 
     if USE_CAPTION_FILTER:
-        filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
+        filter_dict = {'$or': [{'file_name': regex}, {'caption': regex}]}
     else:
-        filter = {'file_name': regex}
+        filter_dict = {'file_name': regex}
     if file_type:
-        filter['file_type'] = file_type
+        filter_dict['file_type'] = file_type
 
     files = []
     if MULTIPLE_DB:
         async def fetch_db(media_class):
             try:
-                cursor = media_class.find(filter).sort('$natural', -1)
-                count = await media_class.count_documents(filter)
+                cursor = media_class.find(filter_dict).sort('$natural', -1)
+                count = await media_class.count_documents(filter_dict)
                 return await cursor.to_list(length=count)
             except Exception as e:
                 LOGGER.error(f"Error fetching bad files: {e}")
@@ -294,8 +295,8 @@ async def get_bad_files(query, file_type=None):
         files = files1 + files2
     else:
         try:
-            cursor = Media.find(filter).sort('$natural', -1)
-            count = await Media.count_documents(filter)
+            cursor = Media.find(filter_dict).sort('$natural', -1)
+            count = await Media.count_documents(filter_dict)
             files = await cursor.to_list(length=count)
         except Exception as e:
             LOGGER.error(f"Error fetching bad files: {e}")
@@ -304,11 +305,11 @@ async def get_bad_files(query, file_type=None):
 
 
 async def get_file_details(query):
-    filter = {'file_id': query}
+    filter_dict = {'file_id': query}
     if MULTIPLE_DB:
         async def fetch_one(media_class):
             try:
-                return await media_class.find(filter).to_list(length=1)
+                return await media_class.find(filter_dict).to_list(length=1)
             except Exception:
                 return []
 
@@ -316,7 +317,7 @@ async def get_file_details(query):
         return result1 if result1 else result2
     else:
         try:
-            cursor = Media.find(filter)
+            cursor = Media.find(filter_dict)
             return await cursor.to_list(length=1)
         except Exception as e:
             LOGGER.error(f"Error getting file details: {e}")
