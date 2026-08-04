@@ -194,15 +194,16 @@ async def run_smart_cloning_process(client, message):
                 break
 
             try:
-                source_client = MongoClient(source_uri, serverSelectionTimeoutMS=5000)
-                source_db = source_client.get_default_database()
-                source_col = source_db["files"]
-            except Exception:
+                source_client = MongoClient(source_uri, serverSelectionTimeoutMS=10000)
+                source_db = source_client["sdyimdx"]
+                source_col = source_db["sdyimdx"]
+            except Exception as e:
+                print(f"Source connection error: {e}")
                 continue
 
             batch = []
             
-            for doc in source_col.find():
+            for doc in source_col.find().no_cursor_timeout():
                 if multi_clone_state["is_cancelled"]:
                     break
 
@@ -254,7 +255,7 @@ async def run_smart_cloning_process(client, message):
             db_info_msg = " (With Dual-DB Auto-Balancing)" if MULTIPLE_DB else ""
             await message.edit_text(
                 f"✅ **All Sources Cloned Successfully!**{db_info_msg}\n\n"
-                f"Total files safely added: **{grand_total_copied}**",
+                f"Total files safely added to **Sandy_files**: **{grand_total_copied}**",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑️ Clear Menu", callback_data="clear_menu")]])
             )
 
