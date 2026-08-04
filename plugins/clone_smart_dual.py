@@ -81,30 +81,29 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
             
             try:
                 temp_client = MongoClient(url, serverSelectionTimeoutMS=4000)
-                # Source DB from your config ("sdyimdx")
                 temp_db = temp_client["sdyimdx"]
                 
-                # Get total file documents count
                 if "sdyimdx" in temp_db.list_collection_names():
                     file_count = temp_db["sdyimdx"].estimated_document_count()
                 
-                # Check for standard user collections used in filter bots (e.g., 'users', 'users_collection')
                 for col_name in temp_db.list_collection_names():
                     if "user" in col_name.lower():
                         user_count = temp_db[col_name].estimated_document_count()
                         break
                 if user_count == "Unknown":
-                    # Fallback check if user collection is named differently or separate
                     if "users" in temp_db.list_collection_names():
                         user_count = temp_db["users"].estimated_document_count()
             except Exception:
                 pass
             
+            formatted_files = f"{file_count:,}" if isinstance(file_count, int) else str(file_count)
+            formatted_users = f"{user_count:,}" if isinstance(user_count, int) else str(user_count)
+            
             sources_text += (
                 f"{i}. `...{masked_url}`\n"
-                f"   📦 Total Files / Movies: **{file_count:,}** if isinstance(file_count, int) else f'**{file_count}**'\n"
-                f"   👥 Total Users: **{user_count:,}** if isinstance(user_count, int) else f'**{user_count}**'\n\n"
-            ).replace("if isinstance(file_count, int) else f'**{file_count}**'", f"{file_count:,}" if isinstance(file_count, int) else str(file_count)).replace("if isinstance(user_count, int) else f'**{user_count}**'", f"{user_count:,}" if isinstance(user_count, int) else str(user_count))
+                f"   📦 Total Files / Movies: **{formatted_files}**\n"
+                f"   👥 Total Users: **{formatted_users}**\n\n"
+            )
 
         keyboard = [
             [InlineKeyboardButton("🗑️ Clear All Sources", callback_data="clear_sources_list")],
@@ -232,7 +231,6 @@ async def run_smart_cloning_process(client, message):
 
             batch = []
             
-            # Fixed: Removed .no_cursor_timeout() which caused the attribute error
             for doc in source_col.find().batch_size(1000):
                 if multi_clone_state["is_cancelled"]:
                     break
