@@ -64,14 +64,12 @@ def get_regex_pattern(query):
     query = query.strip()
     if not query:
         raw_pattern = '.'
-    elif ' ' not in query:
-        raw_pattern = r"(^|[\s\.\+\-_\[\]\(\)])" + re.escape(query) + r"($|[\s\.\+\-_\[\]\(\)])"
     else:
-        parts = query.split(' ')
-        new_parts = []
-        for part in parts:
-            new_parts.append(r"(^|[\s\.\+\-_\[\]\(\)])" + re.escape(part) + r"($|[\s\.\+\-_\[\]\(\)])")
-        raw_pattern = r".*[\s\.\+\-_()\[\]]".join(new_parts)
+        # Flexible pattern matching that ignores spacing differences (e.g. spiderman vs spider man / spider-man)
+        cleaned_query = re.sub(r'[\s\.\+\-_]+', '', query)
+        parts = [re.escape(char) for char in cleaned_query]
+        raw_pattern = r"[\s\.\+\-_]*".join(parts)
+        
     try:
         return re.compile(raw_pattern, flags=re.IGNORECASE)
     except Exception:
@@ -124,7 +122,6 @@ async def save_file(media) -> Tuple[bool, int]:
             if primary_db_size >= db_change_limit_bytes:
                 use_secondary = True
 
-        # Check existing records across BOTH DBs to prevent duplicate entries
         exists = None
         try:
             exists = await Media.find_one({'_id': file_id})
@@ -203,12 +200,23 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     if not regex:
         return [], 0, 0
 
-    # 👈 FIXED: Prevent mutating the passed dictionary
+    # ✅ FIXED: Multi-field search mapping to support local formats and cloned DB schema variants seamlessly
     if filter is None or not isinstance(filter, dict):
         if USE_CAPTION_FILTER:
-            search_filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
+            search_filter = {
+                '$or': [
+                    {'file_name': regex},
+                    {'name': regex},
+                    {'caption': regex}
+                ]
+            }
         else:
-            search_filter = {'file_name': regex}
+            search_filter = {
+                '$or': [
+                    {'file_name': regex},
+                    {'name': regex}
+                ]
+            }
     else:
         search_filter = filter.copy()
 
@@ -220,6 +228,7 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
 
     projection = {
         'file_name': 1,
+        'name': 1,
         'file_size': 1,
         'file_id': 1,
         'file_type': 1,
@@ -274,9 +283,20 @@ async def get_bad_files(query, file_type=None):
         return [], 0
 
     if USE_CAPTION_FILTER:
-        filter_dict = {'$or': [{'file_name': regex}, {'caption': regex}]}
+        filter_dict = {
+            '$or': [
+                {'file_name': regex},
+                {'name': regex},
+                {'caption': regex}
+            ]
+        }
     else:
-        filter_dict = {'file_name': regex}
+        filter_dict = {
+            '$or': [
+                {'file_name': regex},
+                {'name': regex}
+            ]
+        }
     if file_type:
         filter_dict['file_type'] = file_type
 
@@ -354,7 +374,7 @@ def unpack_new_file_id(new_file_id):
     file_ref = encode_file_ref(decoded.file_reference)
     return file_id, file_ref
 
-_TITLE_PROJECTION = {'file_name': 1, 'caption': 1, '_id': 0}
+_TITLE_PROJECTION = {'file_name': 1, 'name': 1, 'caption': 1, '_id': 0}
 
 async def siletxbotz_fetch_media(limit: int) -> List[dict]:
     try:
@@ -408,7 +428,7 @@ async def siletxbotz_get_movies(limit: int = 20) -> List[str]:
         results = set()
         pattern = r"(?:s\d{1,2}|season\s*\d+)(?:\s*e\d{1,2}|episode\s*\d+)?\b"
         for file in candidates:
-            file_name = file.get("file_name") if isinstance(file, dict) else getattr(file, "file_name", "")
+            file_name = file.get("file_name") or file.get("name") or getattr(file, "file_name", "") or getattr(file, "name", "")
             caption = file.get("caption", "") if isinstance(file, dict) else getattr(file, "caption", "")
             if not file_name:
                 continue
@@ -431,7 +451,7 @@ async def siletxbotz_get_series(limit: int = 30) -> Dict[str, List[int]]:
         grouped = defaultdict(list)
         pattern = r"(.*?)(?:S(\d{1,2})|Season\s*(\d+))"
         for file in candidates:
-            file_name = file.get("file_name") if isinstance(file, dict) else getattr(file, "file_name", "")
+            file_name = file.get("file_name") or file.get("name") or getattr(file, "file_name", "") or getattr(file, "name", "")
             caption = file.get("caption", "") if isinstance(file, dict) else getattr(file, "caption", "")
             if not file_name:
                 continue
