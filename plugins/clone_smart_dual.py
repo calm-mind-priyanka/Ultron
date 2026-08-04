@@ -6,8 +6,7 @@ from database.ia_filterdb import Media, Media2
 from info import MULTIPLE_DB
 
 # ==========================================
-# PUT YOUR TELEGRAM USER ID HERE (Numbers only)
-# Example: ADMINS = [123456789]
+# YOUR ADMIN ID CONFIGURED HERE
 ADMINS = [6046055058] 
 # ==========================================
 
@@ -25,7 +24,8 @@ user_input_state = {}
 
 @Client.on_message(filters.command("clonemenu") & filters.user(ADMINS))
 async def clone_menu_command(client, message):
-    await show_main_menu(message)
+    # FIXED: Pass is_edit=False so it replies instead of trying to edit a user message
+    await show_main_menu(message, is_edit=False)
 
 async def show_main_menu(message_or_callback, is_edit=True):
     total_sources = len(multi_clone_state["sources_list"])
@@ -46,7 +46,10 @@ async def show_main_menu(message_or_callback, is_edit=True):
     )
     
     if is_edit:
-        await message_or_callback.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        try:
+            await message_or_callback.edit_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+        except Exception:
+            await message_or_callback.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     else:
         await message_or_callback.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -84,7 +87,7 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
     elif data == "clear_sources_list":
         multi_clone_state["sources_list"] = []
         await callback_query.answer("🧹 All source URLs cleared!")
-        await show_main_menu(callback_query.message)
+        await show_main_menu(callback_query.message, is_edit=True)
 
     elif data == "start_multi_clone":
         if multi_clone_state["is_running"]:
@@ -124,7 +127,7 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
         await callback_query.message.delete()
 
     elif data == "back_to_menu":
-        await show_main_menu(callback_query.message)
+        await show_main_menu(callback_query.message, is_edit=True)
 
 @Client.on_message(filters.text & filters.user(ADMINS))
 async def capture_multi_url_input(client, message):
@@ -212,7 +215,6 @@ async def run_smart_cloning_process(client, message):
                 batch.append(doc)
 
                 if len(batch) >= 5000:
-                    # SMART DUAL-DB ROUTING
                     try:
                         Media.collection.insert_many(batch, ordered=False)
                     except Exception as db_err:
