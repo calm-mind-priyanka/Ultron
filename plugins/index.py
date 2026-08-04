@@ -233,6 +233,10 @@ async def index_files_to_db(lst_msg_id, chat, msg, bot):
                     f"⏰ ETA: <code>{get_readable_time(eta)}</code>",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('Cancel', callback_data='index_cancel')]])
                 )
+                
+                # Yields control back to the event loop instantly so users don't lag
+                await asyncio.sleep(0)
+
             elapsed = time.time() - start_time
             await msg.edit(
                 f"✅ Indexing Completed!\n"
