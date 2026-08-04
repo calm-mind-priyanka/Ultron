@@ -3,7 +3,13 @@ from pymongo import MongoClient
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from database.ia_filterdb import Media, Media2
-from info import ADMINS, MULTIPLE_DB
+from info import MULTIPLE_DB
+
+# ==========================================
+# PUT YOUR TELEGRAM USER ID HERE (Numbers only)
+# Example: ADMINS = [123456789]
+ADMINS = [6046055058] 
+# ==========================================
 
 # Multi-source & Dual DB control state
 multi_clone_state = {
@@ -210,7 +216,6 @@ async def run_smart_cloning_process(client, message):
                     try:
                         Media.collection.insert_many(batch, ordered=False)
                     except Exception as db_err:
-                        # If Media collection encounters storage error / capacity warning, fallback/split to Media2 if enabled
                         if MULTIPLE_DB and Media2:
                             try:
                                 Media2.collection.insert_many(batch, ordered=False)
