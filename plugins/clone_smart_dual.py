@@ -1,4 +1,5 @@
 import asyncio
+import time
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from pyrogram import Client, filters
@@ -18,10 +19,24 @@ multi_clone_state = {
     "is_cancelled": False,
     "current_count": 0,
     "skipped_count": 0,
-    "sources_list": [],
+    "sources_list": [], 
+    "start_time": 0,
+    "total_estimated_docs": 0,
 }
 
 user_input_state = {}
+
+def format_duration(seconds: float) -> str:
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    elif seconds < 3600:
+        minutes, secs = divmod(seconds, 60)
+        return f"{minutes}m {secs}s"
+    else:
+        hours, remainder = divmod(seconds, 3600)
+        minutes, secs = divmod(remainder, 60)
+        return f"{hours}h {minutes}m {secs}s"
 
 @Client.on_message(filters.command("clonemenu") & filters.user(ADMINS))
 async def clone_menu_command(client, message):
@@ -32,7 +47,7 @@ async def show_main_menu(message_or_callback, is_edit=True):
     db_mode = "Dual DB (Media & Media2 Active 🟢)" if MULTIPLE_DB else "Single DB Mode (Media Only)"
     
     keyboard = [
-        [InlineKeyboardButton("➕ Add New Source DB URL", callback_data="add_source_url")],
+        [InlineKeyboardButton("➕ Add New Source DB & Collection", callback_data="add_source_url")],
         [InlineKeyboardButton(f"📋 View Connected Sources ({total_sources})", callback_data="view_sources")],
         [InlineKeyboardButton("⚙️ Start Smart Clone Process", callback_data="start_multi_clone")],
         [InlineKeyboardButton("🗑️ Clear / Reset Everything", callback_data="clear_menu")]
@@ -60,10 +75,10 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
     user_id = callback_query.from_user.id
 
     if data == "add_source_url":
-        user_input_state[user_id] = "awaiting_multi_url"
+        user_input_state[user_id] = {"step": "awaiting_multi_url"}
         await callback_query.message.edit_text(
-            "🔗 **Add New Source MongoDB URL**\n\n"
-            "Please send the new source database URL in chat.",
+            "🔗 **Step 1/2: Add Source MongoDB URL**\n\n"
+            "Please send the source database connection URI in chat:",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("« Back to Menu", callback_data="back_to_menu")]])
         )
         await callback_query.answer()
@@ -76,35 +91,26 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
         await callback_query.answer("📊 Fetching live statistics from source databases...")
         sources_text = "📋 **Connected Source Details & Stats:**\n\n"
         
-        for i, url in enumerate(multi_clone_state["sources_list"], 1):
+        for i, src in enumerate(multi_clone_state["sources_list"], 1):
+            url = src["url"]
+            col_name = src["collection"]
             masked_url = url.split("@")[-1] if "@" in url else url
             file_count = "Unknown"
-            user_count = "Unknown"
             
             try:
                 temp_client = MongoClient(url, serverSelectionTimeoutMS=4000)
-                temp_db = temp_client["sdyimdx"]
-                
-                if "sdyimdx" in temp_db.list_collection_names():
-                    file_count = temp_db["sdyimdx"].estimated_document_count()
-                
-                for col_name in temp_db.list_collection_names():
-                    if "user" in col_name.lower():
-                        user_count = temp_db[col_name].estimated_document_count()
-                        break
-                if user_count == "Unknown":
-                    if "users" in temp_db.list_collection_names():
-                        user_count = temp_db["users"].estimated_document_count()
+                temp_db = temp_client.get_database() 
+                if col_name in temp_db.list_collection_names():
+                    file_count = temp_db[col_name].estimated_document_count()
             except Exception:
                 pass
             
             formatted_files = f"{file_count:,}" if isinstance(file_count, int) else str(file_count)
-            formatted_users = f"{user_count:,}" if isinstance(user_count, int) else str(user_count)
             
             sources_text += (
                 f"{i}. `...{masked_url}`\n"
-                f"   📦 Total Files / Movies: **{formatted_files}**\n"
-                f"   👥 Total Users: **{formatted_users}**\n\n"
+                f"   📁 Collection: `{col_name}`\n"
+                f"   📦 Total Documents: **{formatted_files}**\n\n"
             )
 
         keyboard = [
@@ -115,7 +121,7 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
 
     elif data == "clear_sources_list":
         multi_clone_state["sources_list"] = []
-        await callback_query.answer("🧹 All source URLs cleared!")
+        await callback_query.answer("🧹 All source databases cleared!")
         await show_main_menu(callback_query.message, is_edit=True)
 
     elif data == "start_multi_clone":
@@ -124,10 +130,10 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
             return
         
         if not multi_clone_state["sources_list"]:
-            await callback_query.answer("⚠️ Please add at least one source database URL first!", show_alert=True)
+            await callback_query.answer("⚠️ Please add at least one source database first!", show_alert=True)
             return
 
-        await callback_query.message.edit_text("🔄 **Initializing Smart Dual-DB cloning with duplicate checker...**")
+        await callback_query.message.edit_text("🔄 **Initializing Smart Dual-DB cloning with live timers...**")
         client.loop.create_task(run_smart_cloning_process(client, callback_query.message))
         await callback_query.answer()
 
@@ -169,33 +175,69 @@ async def capture_multi_url_input(client, message):
     global user_input_state, multi_clone_state
     user_id = message.from_user.id
 
-    if user_id in user_input_state and user_input_state[user_id] == "awaiting_multi_url":
-        url = message.text.strip()
-        if not url.startswith("mongodb"):
-            await message.reply_text("❌ Invalid MongoDB URI format! Please try again.")
-            return
+    if user_id in user_input_state:
+        state_data = user_input_state[user_id]
+        step = state_data.get("step")
 
-        multi_clone_state["sources_list"].append(url)
-        user_input_state.pop(user_id, None)
-        
-        total_count = len(multi_clone_state["sources_list"])
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Add Another URL", callback_data="add_source_url")],
-            [InlineKeyboardButton("⚙️ Start Cloning All", callback_data="start_multi_clone")],
-            [InlineKeyboardButton("« Back to Menu", callback_data="back_to_menu")]
-        ])
-        await message.reply_text(
-            f"✅ **Source URL Added Successfully!**\n\n"
-            f"Total sources in queue: **{total_count}**",
-            reply_markup=keyboard
-        )
+        if step == "awaiting_multi_url":
+            url = message.text.strip()
+            if not url.startswith("mongodb"):
+                await message.reply_text("❌ Invalid MongoDB URI format! Please send a valid URI.")
+                return
+
+            user_input_state[user_id] = {
+                "step": "awaiting_collection_name",
+                "url": url
+            }
+            await message.reply_text(
+                "📁 **Step 2/2: Enter Target Collection Name**\n\n"
+                "Please type the exact collection name you want to read files from in this database (e.g., `sdyimdx`, `files`, `Media`):"
+            )
+
+        elif step == "awaiting_collection_name":
+            col_name = message.text.strip()
+            url = state_data.get("url")
+
+            multi_clone_state["sources_list"].append({
+                "url": url,
+                "collection": col_name
+            })
+            user_input_state.pop(user_id, None)
+
+            total_count = len(multi_clone_state["sources_list"])
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("➕ Add Another Source", callback_data="add_source_url")],
+                [InlineKeyboardButton("⚙️ Start Cloning All", callback_data="start_multi_clone")],
+                [InlineKeyboardButton("« Back to Menu", callback_data="back_to_menu")]
+            ])
+            await message.reply_text(
+                f"✅ **Source Added Successfully!**\n\n"
+                f"• Collection: `{col_name}`\n"
+                f"• Total sources configured: **{total_count}**",
+                reply_markup=keyboard
+            )
 
 async def update_live_multi_panel(message):
     try:
+        elapsed = time.time() - multi_clone_state["start_time"] if multi_clone_state["start_time"] > 0 else 0
+        copied = multi_clone_state["current_count"]
+        
+        # Calculate speed & remaining time estimation
+        speed = copied / elapsed if elapsed > 0 else 0
+        total_est = multi_clone_state["total_estimated_docs"]
+        
+        remaining_str = "Calculating..."
+        if speed > 0 and total_est > 0:
+            remaining_docs = max(0, total_est - copied)
+            remaining_seconds = remaining_docs / speed
+            remaining_str = format_duration(remaining_seconds)
+
         status_text = (
-            f"🔄 **Smart Cloning Live Status:**\n\n"
-            f"📦 Successfully Copied: `{multi_clone_state['current_count']:,}` files\n"
+            f"🔄 **Smart Cloning Live Status & Timer:**\n\n"
+            f"📦 Successfully Copied: `{copied:,}` files\n"
             f"⏭️ Skipped Duplicates: `{multi_clone_state['skipped_count']:,}` files\n"
+            f"⏱️ Time Elapsed: `{format_duration(elapsed)}`\n"
+            f"⏳ Estimated Time Left: `{remaining_str}`\n"
             f"⚡ State: `{'PAUSED ⏸️' if multi_clone_state['is_paused'] else 'RUNNING 🚀'}`"
         )
         
@@ -207,7 +249,6 @@ async def update_live_multi_panel(message):
         
         buttons.append(InlineKeyboardButton("🛑 Cancel & Stop", callback_data="cancel_clone"))
         
-        # Added Back / Main Menu button row as requested
         keyboard = [
             buttons,
             [InlineKeyboardButton("« Back to Main Menu", callback_data="back_to_menu")]
@@ -218,28 +259,20 @@ async def update_live_multi_panel(message):
         pass
 
 async def insert_batch_with_fallback(batch):
-    """
-    Smart helper to insert documents into Primary DB (Media).
-    If Primary DB throws an error (like space quota full), it automatically 
-    routes the batch into Secondary DB (Media2) if MULTIPLE_DB is enabled.
-    """
     if not batch:
         return 0, 0
 
     inserted_count = 0
     skipped_count = 0
 
-    # Attempt insertion into Primary DB (Media)
     try:
         result = Media.collection.insert_many(batch, ordered=False)
         inserted_count = len(result.inserted_ids)
     except DuplicateKeyError as dk:
-        # Handle bulk insert duplicate partial errors safely
         if hasattr(dk, 'details') and 'nInserted' in dk.details:
             inserted_count = dk.details['nInserted']
             skipped_count = len(batch) - inserted_count
         else:
-            # Fallback item-by-item check for exact counting
             for doc in batch:
                 try:
                     Media.collection.insert_one(doc)
@@ -247,11 +280,8 @@ async def insert_batch_with_fallback(batch):
                 except Exception:
                     skipped_count += 1
     except Exception as primary_error:
-        # Check if error is related to storage space or full cluster quota
         err_str = str(primary_error).lower()
         if "quota" in err_str or "full" in err_str or "block" in err_str:
-            print(f"⚠️ Primary DB Full/Blocked: {primary_error}. Switching to Media2...")
-            
             if MULTIPLE_DB and Media2:
                 try:
                     result = Media2.collection.insert_many(batch, ordered=False)
@@ -268,12 +298,10 @@ async def insert_batch_with_fallback(batch):
                             except Exception:
                                 skipped_count += 1
                 except Exception as secondary_error:
-                    print(f"❌ Secondary DB also failed: {secondary_error}")
                     raise secondary_error
             else:
                 raise primary_error
         else:
-            # Other errors, try item-by-item or fallback
             for doc in batch:
                 try:
                     Media.collection.insert_one(doc)
@@ -290,23 +318,37 @@ async def run_smart_cloning_process(client, message):
     multi_clone_state["is_cancelled"] = False
     multi_clone_state["current_count"] = 0
     multi_clone_state["skipped_count"] = 0
+    multi_clone_state["start_time"] = time.time()
+    multi_clone_state["total_estimated_docs"] = 0
 
     grand_total_copied = 0
     grand_total_skipped = 0
 
     try:
+        # Pre-calculate total documents across all sources for precise timer estimation
+        for src in multi_clone_state["sources_list"]:
+            try:
+                temp_client = MongoClient(src["url"], serverSelectionTimeoutMS=3000)
+                temp_col = temp_client.get_database()[src["collection"]]
+                multi_clone_state["total_estimated_docs"] += temp_col.estimated_document_count()
+            except Exception:
+                pass
+
         await update_live_multi_panel(message)
 
-        for source_uri in multi_clone_state["sources_list"]:
+        for src in multi_clone_state["sources_list"]:
             if multi_clone_state["is_cancelled"]:
                 break
 
+            source_uri = src["url"]
+            collection_name = src["collection"]
+
             try:
                 source_client = MongoClient(source_uri, serverSelectionTimeoutMS=10000)
-                source_db = source_client["sdyimdx"]
-                source_col = source_db["sdyimdx"]
+                source_db = source_client.get_database()
+                source_col = source_db[collection_name]
             except Exception as e:
-                print(f"Source connection error: {e}")
+                print(f"Source connection error for collection {collection_name}: {e}")
                 continue
 
             batch = []
@@ -326,7 +368,7 @@ async def run_smart_cloning_process(client, message):
                 doc.pop("_id", None)
                 batch.append(doc)
 
-                if len(batch) >= 2000:  # Smaller batch size for better live duplicate counting & fault tolerance
+                if len(batch) >= 2000:
                     ins, skp = await insert_batch_with_fallback(batch)
                     grand_total_copied += ins
                     grand_total_skipped += skp
@@ -343,11 +385,14 @@ async def run_smart_cloning_process(client, message):
                 multi_clone_state["current_count"] = grand_total_copied
                 multi_clone_state["skipped_count"] = grand_total_skipped
 
+        total_time_taken = time.time() - multi_clone_state["start_time"]
+
         if multi_clone_state["is_cancelled"]:
             await message.edit_text(
                 f"❌ **Cloning Cancelled Safely!**\n\n"
                 f"• Successfully Copied: `{grand_total_copied:,}` files\n"
-                f"• Skipped Duplicates: `{grand_total_skipped:,}` files",
+                f"• Skipped Duplicates: `{grand_total_skipped:,}` files\n"
+                f"⏱️ Time Taken: `{format_duration(total_time_taken)}`",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("« Back to Main Menu", callback_data="back_to_menu")]])
             )
         else:
@@ -355,7 +400,8 @@ async def run_smart_cloning_process(client, message):
             await message.edit_text(
                 f"✅ **All Sources Cloned Successfully!**{db_info_msg}\n\n"
                 f"• Total Files Saved: **{grand_total_copied:,}**\n"
-                f"• Duplicate Files Skipped: **{grand_total_skipped:,}**",
+                f"• Duplicate Files Skipped: **{grand_total_skipped:,}**\n"
+                f"⏱️ Total Time Taken: **{format_duration(total_time_taken)}**",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("« Back to Main Menu", callback_data="back_to_menu")]])
             )
 
