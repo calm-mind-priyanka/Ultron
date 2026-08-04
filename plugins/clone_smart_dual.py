@@ -24,7 +24,6 @@ user_input_state = {}
 
 @Client.on_message(filters.command("clonemenu") & filters.user(ADMINS))
 async def clone_menu_command(client, message):
-    # FIXED: Pass is_edit=False so it replies instead of trying to edit a user message
     await show_main_menu(message, is_edit=False)
 
 async def show_main_menu(message_or_callback, is_edit=True):
@@ -124,7 +123,10 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
         multi_clone_state["sources_list"] = []
         multi_clone_state["is_running"] = False
         user_input_state.pop(user_id, None)
-        await callback_query.message.delete()
+        try:
+            await callback_query.message.delete()
+        except Exception:
+            pass
 
     elif data == "back_to_menu":
         await show_main_menu(callback_query.message, is_edit=True)
@@ -212,19 +214,19 @@ async def run_smart_cloning_process(client, message):
                 if multi_clone_state["is_cancelled"]:
                     break
 
+                # Pop _id to avoid collision conflicts or duplicate crashes
+                doc.pop("_id", None)
                 batch.append(doc)
 
                 if len(batch) >= 5000:
                     try:
                         Media.collection.insert_many(batch, ordered=False)
-                    except Exception as db_err:
+                    except Exception:
                         if MULTIPLE_DB and Media2:
                             try:
                                 Media2.collection.insert_many(batch, ordered=False)
                             except Exception:
                                 pass
-                        else:
-                            pass
 
                     grand_total_copied += len(batch)
                     multi_clone_state["current_count"] = grand_total_copied
