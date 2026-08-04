@@ -1,5 +1,6 @@
 import asyncio
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from database.ia_filterdb import Media, Media2
@@ -16,6 +17,7 @@ multi_clone_state = {
     "is_paused": False,
     "is_cancelled": False,
     "current_count": 0,
+    "skipped_count": 0,
     "sources_list": [],
 }
 
@@ -27,7 +29,7 @@ async def clone_menu_command(client, message):
 
 async def show_main_menu(message_or_callback, is_edit=True):
     total_sources = len(multi_clone_state["sources_list"])
-    db_mode = "Dual DB (Media & Media2 Support)" if MULTIPLE_DB else "Single DB Mode"
+    db_mode = "Dual DB (Media & Media2 Active 🟢)" if MULTIPLE_DB else "Single DB Mode (Media Only)"
     
     keyboard = [
         [InlineKeyboardButton("➕ Add New Source DB URL", callback_data="add_source_url")],
@@ -40,7 +42,7 @@ async def show_main_menu(message_or_callback, is_edit=True):
         "🎛️ **Smart Multi-Source & Dual-DB Clone Manager**\n\n"
         f"• Target Mode: **{db_mode}**\n"
         f"• Connected Sources Ready: **{total_sources}**\n"
-        "• *Note:* If Dual DB is active, files will automatically switch to Media2 if Media fills up."
+        "• *Note:* Duplicates are automatically skipped, and if Primary DB fills up, writes auto-switch to Media2."
     )
     
     if is_edit:
@@ -125,7 +127,7 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
             await callback_query.answer("⚠️ Please add at least one source database URL first!", show_alert=True)
             return
 
-        await callback_query.message.edit_text("🔄 **Initializing Smart Dual-DB cloning...**")
+        await callback_query.message.edit_text("🔄 **Initializing Smart Dual-DB cloning with duplicate checker...**")
         client.loop.create_task(run_smart_cloning_process(client, callback_query.message))
         await callback_query.answer()
 
@@ -145,7 +147,7 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
         if multi_clone_state["is_running"]:
             multi_clone_state["is_cancelled"] = True
             multi_clone_state["is_paused"] = False
-            await callback_query.answer("🛑 Cancelling process...")
+            await callback_query.answer("🛑 Stopping process safely...")
 
     elif data == "clear_menu":
         multi_clone_state["sources_list"] = []
@@ -157,6 +159,9 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
             pass
 
     elif data == "back_to_menu":
+        if multi_clone_state["is_running"]:
+            await callback_query.answer("⚠️ Cannot return while cloning is running! Use Cancel first.", show_alert=True)
+            return
         await show_main_menu(callback_query.message, is_edit=True)
 
 @Client.on_message(filters.text & filters.user(ADMINS))
@@ -189,7 +194,8 @@ async def update_live_multi_panel(message):
     try:
         status_text = (
             f"🔄 **Smart Cloning Live Status:**\n\n"
-            f"📦 Progress: `{multi_clone_state['current_count']}` files copied\n"
+            f"📦 Successfully Copied: `{multi_clone_state['current_count']:,}` files\n"
+            f"⏭️ Skipped Duplicates: `{multi_clone_state['skipped_count']:,}` files\n"
             f"⚡ State: `{'PAUSED ⏸️' if multi_clone_state['is_paused'] else 'RUNNING 🚀'}`"
         )
         
@@ -199,11 +205,83 @@ async def update_live_multi_panel(message):
         else:
             buttons.append(InlineKeyboardButton("⏸️ Pause", callback_data="pause_clone"))
         
-        buttons.append(InlineKeyboardButton("🛑 Cancel", callback_data="cancel_clone"))
+        buttons.append(InlineKeyboardButton("🛑 Cancel & Stop", callback_data="cancel_clone"))
         
-        await message.edit_text(status_text, reply_markup=InlineKeyboardMarkup([buttons]))
+        # Added Back / Main Menu button row as requested
+        keyboard = [
+            buttons,
+            [InlineKeyboardButton("« Back to Main Menu", callback_data="back_to_menu")]
+        ]
+        
+        await message.edit_text(status_text, reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception:
         pass
+
+async def insert_batch_with_fallback(batch):
+    """
+    Smart helper to insert documents into Primary DB (Media).
+    If Primary DB throws an error (like space quota full), it automatically 
+    routes the batch into Secondary DB (Media2) if MULTIPLE_DB is enabled.
+    """
+    if not batch:
+        return 0, 0
+
+    inserted_count = 0
+    skipped_count = 0
+
+    # Attempt insertion into Primary DB (Media)
+    try:
+        result = Media.collection.insert_many(batch, ordered=False)
+        inserted_count = len(result.inserted_ids)
+    except DuplicateKeyError as dk:
+        # Handle bulk insert duplicate partial errors safely
+        if hasattr(dk, 'details') and 'nInserted' in dk.details:
+            inserted_count = dk.details['nInserted']
+            skipped_count = len(batch) - inserted_count
+        else:
+            # Fallback item-by-item check for exact counting
+            for doc in batch:
+                try:
+                    Media.collection.insert_one(doc)
+                    inserted_count += 1
+                except Exception:
+                    skipped_count += 1
+    except Exception as primary_error:
+        # Check if error is related to storage space or full cluster quota
+        err_str = str(primary_error).lower()
+        if "quota" in err_str or "full" in err_str or "block" in err_str:
+            print(f"⚠️ Primary DB Full/Blocked: {primary_error}. Switching to Media2...")
+            
+            if MULTIPLE_DB and Media2:
+                try:
+                    result = Media2.collection.insert_many(batch, ordered=False)
+                    inserted_count = len(result.inserted_ids)
+                except DuplicateKeyError as dk2:
+                    if hasattr(dk2, 'details') and 'nInserted' in dk2.details:
+                        inserted_count = dk2.details['nInserted']
+                        skipped_count = len(batch) - inserted_count
+                    else:
+                        for doc in batch:
+                            try:
+                                Media2.collection.insert_one(doc)
+                                inserted_count += 1
+                            except Exception:
+                                skipped_count += 1
+                except Exception as secondary_error:
+                    print(f"❌ Secondary DB also failed: {secondary_error}")
+                    raise secondary_error
+            else:
+                raise primary_error
+        else:
+            # Other errors, try item-by-item or fallback
+            for doc in batch:
+                try:
+                    Media.collection.insert_one(doc)
+                    inserted_count += 1
+                except Exception:
+                    skipped_count += 1
+
+    return inserted_count, skipped_count
 
 async def run_smart_cloning_process(client, message):
     global multi_clone_state
@@ -211,8 +289,10 @@ async def run_smart_cloning_process(client, message):
     multi_clone_state["is_paused"] = False
     multi_clone_state["is_cancelled"] = False
     multi_clone_state["current_count"] = 0
+    multi_clone_state["skipped_count"] = 0
 
     grand_total_copied = 0
+    grand_total_skipped = 0
 
     try:
         await update_live_multi_panel(message)
@@ -243,52 +323,47 @@ async def run_smart_cloning_process(client, message):
                 if multi_clone_state["is_cancelled"]:
                     break
 
-                # Pop _id to avoid collision conflicts or duplicate crashes
                 doc.pop("_id", None)
                 batch.append(doc)
 
-                if len(batch) >= 5000:
-                    try:
-                        Media.collection.insert_many(batch, ordered=False)
-                    except Exception:
-                        if MULTIPLE_DB and Media2:
-                            try:
-                                Media2.collection.insert_many(batch, ordered=False)
-                            except Exception:
-                                pass
-
-                    grand_total_copied += len(batch)
+                if len(batch) >= 2000:  # Smaller batch size for better live duplicate counting & fault tolerance
+                    ins, skp = await insert_batch_with_fallback(batch)
+                    grand_total_copied += ins
+                    grand_total_skipped += skp
+                    
                     multi_clone_state["current_count"] = grand_total_copied
+                    multi_clone_state["skipped_count"] = grand_total_skipped
                     batch = []
                     await update_live_multi_panel(message)
 
             if batch and not multi_clone_state["is_cancelled"]:
-                try:
-                    Media.collection.insert_many(batch, ordered=False)
-                except Exception:
-                    if MULTIPLE_DB and Media2:
-                        try:
-                            Media2.collection.insert_many(batch, ordered=False)
-                        except Exception:
-                            pass
-                grand_total_copied += len(batch)
+                ins, skp = await insert_batch_with_fallback(batch)
+                grand_total_copied += ins
+                grand_total_skipped += skp
                 multi_clone_state["current_count"] = grand_total_copied
+                multi_clone_state["skipped_count"] = grand_total_skipped
 
         if multi_clone_state["is_cancelled"]:
             await message.edit_text(
-                f"❌ **Cloning Cancelled!**\nSuccessfully saved `{grand_total_copied}` files.",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑️ Clear Menu", callback_data="clear_menu")]])
+                f"❌ **Cloning Cancelled Safely!**\n\n"
+                f"• Successfully Copied: `{grand_total_copied:,}` files\n"
+                f"• Skipped Duplicates: `{grand_total_skipped:,}` files",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("« Back to Main Menu", callback_data="back_to_menu")]])
             )
         else:
-            db_info_msg = " (With Dual-DB Auto-Balancing)" if MULTIPLE_DB else ""
+            db_info_msg = " (With Dual-DB Auto-Balancing 🟢)" if MULTIPLE_DB else ""
             await message.edit_text(
                 f"✅ **All Sources Cloned Successfully!**{db_info_msg}\n\n"
-                f"Total files safely added to **Sandy_files**: **{grand_total_copied}**",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑️ Clear Menu", callback_data="clear_menu")]])
+                f"• Total Files Saved: **{grand_total_copied:,}**\n"
+                f"• Duplicate Files Skipped: **{grand_total_skipped:,}**",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("« Back to Main Menu", callback_data="back_to_menu")]])
             )
 
     except Exception as e:
-        await message.edit_text(f"❌ **Clone Failed:**\n<code>{str(e)}</code>", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🗑️ Clear Menu", callback_data="clear_menu")]]))
+        await message.edit_text(
+            f"❌ **Clone Failed / Stopped:**\n<code>{str(e)}</code>", 
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("« Back to Main Menu", callback_data="back_to_menu")]])
+        )
     
     finally:
         multi_clone_state["is_running"] = False
