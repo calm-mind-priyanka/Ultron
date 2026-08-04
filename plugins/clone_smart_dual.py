@@ -232,7 +232,8 @@ async def run_smart_cloning_process(client, message):
 
             batch = []
             
-            for doc in source_col.find().no_cursor_timeout():
+            # Fixed: Removed .no_cursor_timeout() which caused the attribute error
+            for doc in source_col.find().batch_size(1000):
                 if multi_clone_state["is_cancelled"]:
                     break
 
