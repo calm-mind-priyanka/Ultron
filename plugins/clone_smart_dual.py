@@ -16,7 +16,6 @@ multi_clone_state = {
     "is_paused": False,
     "is_cancelled": False,
     "current_count": 0,
-    "total_docs": 0,
     "sources_list": [],
 }
 
@@ -72,10 +71,40 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
             await callback_query.answer("⚠️ No source databases added yet!", show_alert=True)
             return
         
-        sources_text = "📋 **List of Connected Source Databases:**\n\n"
+        await callback_query.answer("📊 Fetching live statistics from source databases...")
+        sources_text = "📋 **Connected Source Details & Stats:**\n\n"
+        
         for i, url in enumerate(multi_clone_state["sources_list"], 1):
             masked_url = url.split("@")[-1] if "@" in url else url
-            sources_text += f"{i}. `...{masked_url}`\n"
+            file_count = "Unknown"
+            user_count = "Unknown"
+            
+            try:
+                temp_client = MongoClient(url, serverSelectionTimeoutMS=4000)
+                # Source DB from your config ("sdyimdx")
+                temp_db = temp_client["sdyimdx"]
+                
+                # Get total file documents count
+                if "sdyimdx" in temp_db.list_collection_names():
+                    file_count = temp_db["sdyimdx"].estimated_document_count()
+                
+                # Check for standard user collections used in filter bots (e.g., 'users', 'users_collection')
+                for col_name in temp_db.list_collection_names():
+                    if "user" in col_name.lower():
+                        user_count = temp_db[col_name].estimated_document_count()
+                        break
+                if user_count == "Unknown":
+                    # Fallback check if user collection is named differently or separate
+                    if "users" in temp_db.list_collection_names():
+                        user_count = temp_db["users"].estimated_document_count()
+            except Exception:
+                pass
+            
+            sources_text += (
+                f"{i}. `...{masked_url}`\n"
+                f"   📦 Total Files / Movies: **{file_count:,}** if isinstance(file_count, int) else f'**{file_count}**'\n"
+                f"   👥 Total Users: **{user_count:,}** if isinstance(user_count, int) else f'**{user_count}**'\n\n"
+            ).replace("if isinstance(file_count, int) else f'**{file_count}**'", f"{file_count:,}" if isinstance(file_count, int) else str(file_count)).replace("if isinstance(user_count, int) else f'**{user_count}**'", f"{user_count:,}" if isinstance(user_count, int) else str(user_count))
 
         keyboard = [
             [InlineKeyboardButton("🗑️ Clear All Sources", callback_data="clear_sources_list")],
