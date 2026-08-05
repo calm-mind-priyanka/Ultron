@@ -353,7 +353,7 @@ async def run_smart_cloning_process(client, message):
 
             batch = []
             
-            for doc in source_col.find().batch_size(1000):
+            for doc in source_col.find().batch_size(5000):
                 if multi_clone_state["is_cancelled"]:
                     break
 
@@ -368,7 +368,7 @@ async def run_smart_cloning_process(client, message):
                 doc.pop("_id", None)
                 batch.append(doc)
 
-                if len(batch) >= 2000:
+                if len(batch) >= 5000:
                     ins, skp = await insert_batch_with_fallback(batch)
                     grand_total_copied += ins
                     grand_total_skipped += skp
