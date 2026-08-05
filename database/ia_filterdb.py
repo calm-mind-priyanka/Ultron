@@ -65,7 +65,6 @@ def get_regex_pattern(query):
     if not query:
         raw_pattern = '.'
     else:
-        # Flexible pattern matching that ignores spacing differences (e.g. spiderman vs spider man / spider-man)
         cleaned_query = re.sub(r'[\s\.\+\-_]+', '', query)
         parts = [re.escape(char) for char in cleaned_query]
         raw_pattern = r"[\s\.\+\-_]*".join(parts)
@@ -77,7 +76,6 @@ def get_regex_pattern(query):
 
 
 async def check_db_size(silentdb):
-    """Safely checks database size without caching failure values."""
     try:
         global _db_size_cache
         current_time = time.time()
@@ -106,8 +104,8 @@ async def check_db_size(silentdb):
             _db_size_cache['size'] = size
         return size
     except Exception as e:
-        LOGGER.error(f"Error checking DB size (Primary DB may be full/quota restricted): {e}")
-        return (DB_CHANGE_LIMIT * 1024 * 1024) + 1
+        LOGGER.error(f"Error checking DB size: {e}")
+        return 0
 
 
 async def save_file(media) -> Tuple[bool, int]:
@@ -135,7 +133,6 @@ async def save_file(media) -> Tuple[bool, int]:
                 LOGGER.warning(f"Secondary DB duplicate check read error: {e}")
 
         if exists:
-            LOGGER.info(f'{file_name} Is Already Saved In Database!')
             return False, 0
 
         target_model = Media2 if use_secondary else Media
@@ -176,7 +173,6 @@ async def save_file(media) -> Tuple[bool, int]:
         LOGGER.error(f'Validation Error While Saving File: {e}')
         return False, 2
     except DuplicateKeyError:
-        LOGGER.info(f'{file_name} Is Already Saved In Database')
         return False, 0
     except Exception as e:
         LOGGER.error(f"Unexpected error in save_file: {e}")
@@ -200,7 +196,6 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     if not regex:
         return [], 0, 0
 
-    # ✅ FIXED: Multi-field search mapping to support local formats and cloned DB schema variants seamlessly
     if filter is None or not isinstance(filter, dict):
         if USE_CAPTION_FILTER:
             search_filter = {
@@ -240,7 +235,6 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     count_db1 = 0
     count_db2 = 0
 
-    # 1. READ FROM PRIMARY DB
     try:
         count_db1 = await Media.count_documents(search_filter)
         if offset < count_db1:
@@ -250,7 +244,6 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
         LOGGER.error(f"Primary DB search read error: {e}")
         count_db1 = 0
 
-    # 2. READ FROM SECONDARY DB IF MULTIPLE_DB IS ACTIVE
     if MULTIPLE_DB:
         try:
             count_db2 = await Media2.count_documents(search_filter)
