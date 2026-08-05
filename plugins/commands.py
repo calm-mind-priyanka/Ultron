@@ -322,7 +322,7 @@ async def start(client, message):
     files_ = await get_file_details(file_id)  
     settings = await get_settings(int(grp_id))
     if not files_:
-        pre, file_id = ((base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))).decode("ascii")).split("_", 1)
+        pre, file_id = ((base64.urlsafe_b64decode(data + "=" * (-len(data) % 4))).decode("utf-8", "ignore")).split("_", 1)
         try:
             if STREAM_MODE:
                 btn = [
