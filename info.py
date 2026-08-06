@@ -33,7 +33,7 @@ ADMINS = [int(admin) if id_pattern.search(admin) else admin for admin in environ
 CHANNELS = [int(ch) if id_pattern.search(ch) else ch for ch in environ.get('CHANNELS', '-1002694840394').split()]
 LOG_CHANNEL = int(environ.get('LOG_CHANNEL', '-1002433610423'))  
 BIN_CHANNEL = int(environ.get('BIN_CHANNEL', '-1002433610423'))  
-MOVIE_UPDATE_CHANNEL = int(environ.get('MOVIE_UPDATE_CHANNEL', ' -1002260068200'))  
+MOVIE_UPDATE_CHANNEL = int(environ.get('MOVIE_UPDATE_CHANNEL', '-1002260068200'))  
 PREMIUM_LOGS = int(environ.get('PREMIUM_LOGS', '-1002350369630')) 
 auth_grp = environ.get('AUTH_GROUP')
 AUTH_GROUPS = [int(ch) for ch in auth_grp.split()] if auth_grp else None
@@ -46,8 +46,7 @@ DATABASE_URI = environ.get('DATABASE_URI', "mongodb+srv://rajibchaun_db_user:Fa1
 DATABASE_NAME = environ.get('DATABASE_NAME', "Cluster0")
 COLLECTION_NAME = environ.get('COLLECTION_NAME', 'Sandy_files')
 
-# If MULTIPLE_DB Is True Then Fill DATABASE_URI2 Value Else You Will Get Error.
-MULTIPLE_DB = is_enabled(os.environ.get('MULTIPLE_DB', "True"), True) # Type True For Turn On MULTIPLE DB FUNTION 
+MULTIPLE_DB = is_enabled(os.environ.get('MULTIPLE_DB', "True"), True)
 DATABASE_URI2 = environ.get('DATABASE_URI2', "mongodb+srv://Vivekchaun24_23:SPNaSnJhXQ39ZMtg@cluster0.74vyoq2.mongodb.net/?appName=Cluster0")
 DB_CHANGE_LIMIT = int(environ.get('DB_CHANGE_LIMIT', "432")) 
 
@@ -56,7 +55,7 @@ CHNL_LNK = environ.get('CHNL_LNK', 'https://t.me/+DiOcxJnNQXdmNDdl')
 OWNER_LNK = environ.get('OWNER_LNK', 'https://t.me/Sandymaiwait')
 UPDATE_CHANNEL_LNK = environ.get('UPDATE_CHANNEL_LNK', 'https://t.me/+DiOcxJnNQXdmNDdl')
 
-AUTH_CHANNEL = environ.get("AUTH_CHANNEL", "-1002260068200") # add multiple channels here, separated by single space
+AUTH_CHANNEL = environ.get("AUTH_CHANNEL", "-1002260068200")
 AUTH_REQ_CHANNEL = environ.get('AUTH_REQ_CHANNEL', '-1002260068200')
 
 IS_VERIFY = is_enabled('IS_VERIFY', True)
@@ -70,10 +69,8 @@ TUTORIAL_3 = environ.get("TUTORIAL_3", "https://t.me/+URI0ggQ1mLAyM2Y1")
 
 SHORTENER_API = environ.get("SHORTENER_API", "204bba345b04f7812f6de7e079f063d9ab3709b9")
 SHORTENER_WEBSITE = environ.get("SHORTENER_WEBSITE", "arolinks.com")
-
 SHORTENER_API2 = environ.get("SHORTENER_API2", "e2239d738dd541fe55fe74ae6e00c782dc843715")
 SHORTENER_WEBSITE2 = environ.get("SHORTENER_WEBSITE2", "CPMShort.com")
-
 SHORTENER_API3 = environ.get("SHORTENER_API3", "0eb911f6bd85416d49e665a10688d810bfd5154d")
 SHORTENER_WEBSITE3 = environ.get("SHORTENER_WEBSITE3", "linkshortify.com")
 
@@ -99,7 +96,7 @@ BATCH_FILE_CAPTION = environ.get("BATCH_FILE_CAPTION", CUSTOM_FILE_CAPTION)
 IMDB_TEMPLATE = environ.get("IMDB_TEMPLATE", f"{script.IMDB_TEMPLATE_TXT}")
 LONG_IMDB_DESCRIPTION = is_enabled(environ.get("LONG_IMDB_DESCRIPTION", "False"), False)
 SPELL_CHECK_REPLY = is_enabled(environ.get("SPELL_CHECK_REPLY", "True"), True)
-MAX_LIST_ELM = int(environ.get("MAX_LIST_ELM") or 10) or None # Maximum number of elements in a list (default: 10, set 0 for no limit)
+MAX_LIST_ELM = int(environ.get("MAX_LIST_ELM") or 10) or None 
 INDEX_REQ_CHANNEL = int(environ.get('INDEX_REQ_CHANNEL', LOG_CHANNEL))
 FILE_STORE_CHANNEL = [int(ch) for ch in (environ.get('FILE_STORE_CHANNEL', '')).split()]
 MELCOW_NEW_USERS = is_enabled((environ.get('MELCOW_NEW_USERS', "False")), False)
@@ -110,10 +107,9 @@ PAID_STREAM = bool(environ.get('PAID_STREAM', True))
 STREAM_MODE = bool(environ.get('STREAM_MODE', True))
 MAINTENANCE_MODE = bool(environ.get('MAINTENANCE_MODE', False)) 
 
-IGNORE_WORDS = (list(os.environ.get("IGNORE_WORDS").split(",")) if os.environ.get("IGNORE_WORDS") else []) #Remove Words While Searching Files
 IGNORE_WORDS = [
     "movies", "movie", "episode", "episodes", "south indian", "south indian movie",
-    "south movie", "south indian", "web-series", "web series", "webseries", "hindi me bhejo",
+    "south movie", "web-series", "web series", "webseries", "hindi me bhejo",
     "ful", ",", "!", "kro", "jaldi", "audio", "language", "mkv", "mp4", "web", "series",
     "hollywood", "all", "bollywood", "south", "hd", "karo", "upload", "bhejo",
     "fullepisode", "please", "plz", "send", "link", "dabbed", "dubbed", "season",
@@ -133,10 +129,9 @@ BAD_WORDS = [
     "predvd", "dvdscr", "hdts", "camrip", "hdcam", "hdrip", "brrip", "bdrip",
 ]
 
-LANGUAGES = ["malayalam", "", "tamil", "", "english", "", "hindi", "", "telugu", "", "kannada", "", "gujarati", "", "marathi", "", "punjabi", ""]
-QUALITIES = ["360P", "", "480P", "", "720P", "", "1080P", "", "1440P", "", "2160P", ""]
+LANGUAGES = ["malayalam", "tamil", "english", "hindi", "telugu", "kannada", "gujarati", "marathi", "punjabi"]
+QUALITIES = ["360P", "480P", "720P", "1080P", "1440P", "2160P"]
 SEASONS = ["Season 1", "Season 2", "Season 3", "Season 4", "Season 5", "Season 6", "Season 7", "Season 8", "Season 9", "Season 10"]
-
 
 NO_PORT = bool(environ.get('NO_PORT', False))
 APP_NAME = None
@@ -153,18 +148,12 @@ WORKERS = int(environ.get('WORKERS', '4'))
 SESSION_NAME = str(environ.get('SESSION_NAME', 'SilentXBotz'))
 MULTI_CLIENT = False
 name = str(environ.get('name', 'SilentX'))
-PING_INTERVAL = int(environ.get("PING_INTERVAL", "1200"))  # 20 minutes
-if 'DYNO' in environ:
-    ON_HEROKU = True
-    APP_NAME = str(getenv('APP_NAME'))
-else:
-    ON_HEROKU = False
+PING_INTERVAL = int(environ.get("PING_INTERVAL", "1200"))
 HAS_SSL = bool(getenv('HAS_SSL', False))
 if HAS_SSL:
     URL = "https://{}/".format(FQDN)
 else:
     URL = "http://{}/".format(FQDN)
-
 
 REACTIONS = ["🤝", "😇", "🤗", "😍", "👍", "🎅", "😐", "🥰", "🤩", "😱", "🤣", "😘", "👏", "😛", "😈", "🎉", "⚡️", "🫡", "🤓", "😎", "🏆", "🔥", "🤭", "🌚", "🆒", "👻", "😁"]
 
@@ -188,18 +177,12 @@ Bot_cmds = {
     "stats": "ᴄʜᴇᴄᴋ ʙᴏᴛ ꜱᴛᴀᴛᴜꜱ.",
     "delete": "ᴅᴇʟᴇᴛᴇ ᴀ ꜱᴘᴇᴄɪꜰɪᴄ ꜰɪʟᴇ ꜰʀᴏᴍ ᴅʙ.",
     "movie_update": "ᴏɴ ᴏғғ ᴀᴄᴄᴏʀᴅɪɴɢ ʏᴏᴜʀ ɴᴇᴇᴅᴇᴅ...",
-    "pm_search": "ᴘᴍ sᴇᴀʀᴄʜ ᴏɴ ᴏғғ ᴀᴄᴄᴏʀᴅɪɴɢ ʏᴏᴜʀ ɴᴇᴇᴅᴇᴅ...",
+    "pm_search": "ᴘᴍ sᴇᴀʀᴄʜ ᴏْن ᴏғғ ᴀᴄᴄᴏʀᴅɪɴɢ ʏᴏᴜʀ ɴᴇᴇᴅᴇᴅ...",
     "restart": "ʀᴇꜱᴛᴀʀᴛ ᴛʜᴇ ʙᴏᴛ."
 }
 
-#Don't Change Anything Here
-
 if MULTIPLE_DB == False:
-    DATABASE_URI = DATABASE_URI
     DATABASE_URI2 = DATABASE_URI
-else:
-    DATABASE_URI = DATABASE_URI
-    DATABASE_URI2 = DATABASE_URI2
 
 AUTH_CHANNEL = [int(ch) for ch in AUTH_CHANNEL.strip().split()] if AUTH_CHANNEL else []
 AUTH_REQ_CHANNEL = [int(ch) for ch in AUTH_REQ_CHANNEL.strip().split()] if AUTH_REQ_CHANNEL else []
