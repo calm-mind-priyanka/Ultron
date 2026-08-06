@@ -343,7 +343,7 @@ async def run_smart_cloning_process(client, message):
                 continue
 
             batch = []
-            cursor = source_col.find(no_cursor_timeout=True).batch_size(2000)
+            cursor = source_col.find({}).batch_size(2000)
             
             try:
                 for doc in cursor:
