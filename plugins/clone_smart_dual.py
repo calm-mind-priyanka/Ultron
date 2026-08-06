@@ -1,7 +1,7 @@
 import asyncio
 import time
 from pymongo import MongoClient
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, BulkWriteError
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from database.ia_filterdb import Media, Media2
@@ -222,7 +222,6 @@ async def update_live_multi_panel(message):
         elapsed = time.time() - multi_clone_state["start_time"] if multi_clone_state["start_time"] > 0 else 0
         copied = multi_clone_state["current_count"]
         
-        # Calculate speed & remaining time estimation
         speed = copied / elapsed if elapsed > 0 else 0
         total_est = multi_clone_state["total_estimated_docs"]
         
@@ -268,35 +267,28 @@ async def insert_batch_with_fallback(batch):
     try:
         result = Media.collection.insert_many(batch, ordered=False)
         inserted_count = len(result.inserted_ids)
-    except DuplicateKeyError as dk:
-        if hasattr(dk, 'details') and 'nInserted' in dk.details:
-            inserted_count = dk.details['nInserted']
-            skipped_count = len(batch) - inserted_count
-        else:
-            for doc in batch:
-                try:
-                    Media.collection.insert_one(doc)
-                    inserted_count += 1
-                except Exception:
-                    skipped_count += 1
+    except BulkWriteError as bwe:
+        details = bwe.details
+        inserted_count = details.get('nInserted', 0)
+        skipped_count = len(batch) - inserted_count
+    except DuplicateKeyError:
+        for doc in batch:
+            try:
+                Media.collection.insert_one(doc)
+                inserted_count += 1
+            except Exception:
+                skipped_count += 1
     except Exception as primary_error:
         err_str = str(primary_error).lower()
-        if "quota" in err_str or "full" in err_str or "block" in err_str:
+        if "quota" in err_str or "full" in err_str or "block" in err_str or "storage" in err_str or "exceeded" in err_str:
             if MULTIPLE_DB and Media2:
                 try:
                     result = Media2.collection.insert_many(batch, ordered=False)
                     inserted_count = len(result.inserted_ids)
-                except DuplicateKeyError as dk2:
-                    if hasattr(dk2, 'details') and 'nInserted' in dk2.details:
-                        inserted_count = dk2.details['nInserted']
-                        skipped_count = len(batch) - inserted_count
-                    else:
-                        for doc in batch:
-                            try:
-                                Media2.collection.insert_one(doc)
-                                inserted_count += 1
-                            except Exception:
-                                skipped_count += 1
+                except BulkWriteError as bwe2:
+                    details2 = bwe2.details
+                    inserted_count = details2.get('nInserted', 0)
+                    skipped_count = len(batch) - inserted_count
                 except Exception as secondary_error:
                     raise secondary_error
             else:
@@ -325,7 +317,6 @@ async def run_smart_cloning_process(client, message):
     grand_total_skipped = 0
 
     try:
-        # Pre-calculate total documents across all sources for precise timer estimation
         for src in multi_clone_state["sources_list"]:
             try:
                 temp_client = MongoClient(src["url"], serverSelectionTimeoutMS=3000)
@@ -365,8 +356,9 @@ async def run_smart_cloning_process(client, message):
                 if multi_clone_state["is_cancelled"]:
                     break
 
-                doc.pop("_id", None)
-                batch.append(doc)
+                clean_doc = dict(doc)
+                clean_doc.pop("_id", None)
+                batch.append(clean_doc)
 
                 if len(batch) >= 5000:
                     ins, skp = await insert_batch_with_fallback(batch)
