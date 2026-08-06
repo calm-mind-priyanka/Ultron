@@ -17,7 +17,7 @@ from pyrogram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerId
 from utils import *
 from fuzzywuzzy import process
 from database.users_chats_db import db
-from database.ia_filterdb import Media, Media2, get_file_details, get_search_results, get_bad_files
+from database.ia_filterdb import Media, Media2, get_file_details, get_search_results, get_bad_files, db as main_db, db2 as secondary_db
 from logging_helper import LOGGER
 from urllib.parse import quote_plus
 from Lucia.util.file_properties import get_name, get_hash, get_media_file_size
@@ -191,7 +191,7 @@ async def generic_filter_handler(client, query, key, offset, search_query):
         
         del_seconds = settings.get("auto_del_time", AUTO_DELETE_TIME)
         readable_time = get_readable_time(del_seconds)
-        cap += f"\n\n<blockquote>⚠️ <b>ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴀꜰᴛᴇʀ {readable_time} ᴛᴏ ᴀᴠᴏɪᴅ ᴄᴏᴘʏʀɪɢʜᴛ ɪꜱꜱᴜᴇꜱ 🗑</b></blockquote>"
+        cap += f"\n\n<blockquote>⚠️ <b>ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴀꜰᴛᴇ🇷 {readable_time} ᴛᴏ ᴀᴠᴏɪᴅ ᴄᴏᴘʏʀɪɢʜᴛ ɪꜱꜱᴜᴇꜱ 🗑</b></blockquote>"
 
         try:
             await query.message.edit_text(text=cap, reply_markup=InlineKeyboardMarkup(btn), disable_web_page_preview=True, parse_mode=enums.ParseMode.HTML)
@@ -512,13 +512,9 @@ async def cb_handler(client: Client, query: CallbackQuery):
                 for file in files:
                     file_ids = file.file_id
                     file_name = file.file_name
-                    result = await Media.collection.delete_one({
-                        '_id': file_ids,
-                    })
+                    result = await main_db[COLLECTION_NAME].delete_one({'_id': file_ids})
                     if not result.deleted_count and MULTIPLE_DB:
-                        result = await Media2.collection.delete_one({
-                            '_id': file_ids,
-                        })
+                        result = await secondary_db[COLLECTION_NAME].delete_one({'_id': file_ids})
                     if result.deleted_count:
                         LOGGER.info(f'ꜰɪʟᴇ ꜰᴏᴜɴᴅ ꜰᴏʀ ʏᴏᴜʀ ǫᴜᴇʀʏ {keyword}! ꜱᴜᴄᴄᴇꜱꜱꜰᴜʟʟʏ ᴅᴇʟᴇᴛᴇᴅ {file_name} ꜰʀᴏᴍ ᴅᴀᴛᴀʙᴀꜱᴇ.')
                     deleted += 1
@@ -634,7 +630,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
             user_id = query.from_user.id
             is_premium_user = await db.has_premium_access(user_id)
             if PAID_STREAM and not is_premium_user:
-                premiumbtn = [[InlineKeyboardButton("𝖡𝗎𝗒 𝖯𝗋𝖾𝗆𝗂𝗎𝗆 ♻️", callback_data='buy')]]
+                premiumbtn = [[InlineKeyboardButton("𝖡𝗎𝗒 𝖯𝗋𝖾𝗆𝗂𝗎𝙢 ♻️", callback_data='buy')]]
                 await query.answer("<b>📌 ᴛʜɪꜱ ꜰᴇᴀᴛᴜʀᴇ ɪꜱ ᴏɴʟʏ ꜰᴏʀ ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀꜱ</b>", show_alert=True)
                 await query.message.reply("<b>📌 ᴛʜɪꜱ ꜰᴇᴀᴛᴜʀᴇ ɪꜱ ᴏɴʟʏ ꜰᴏʀ ᴘʀᴇᴍɪᴜᴍ ᴜꜱᴇʀꜱ. ʙᴜʏ ᴘʀᴇᴍɪᴜᴍ ᴛᴏ ᴀᴄᴄᴇꜱꜱ ᴛʜɪꜱ ꜰᴇᴀᴛᴜʀᴇ ✅</b>", reply_markup=InlineKeyboardMarkup(premiumbtn))
                 return
@@ -874,7 +870,10 @@ async def auto_filter(client, msg, spoll=False):
             if not files:
                 if settings["spell_check"]:
                     ai_sts = await m.edit('🤖 ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ, ᴀɪ ɪꜱ ᴄʜᴇᴄᴋɪɴɢ ʏᴏᴜʀ ꜱᴘᴇʟʟɪɴɢ...')
-                    is_misspelled = await ai_spell_check(chat_id=message.chat.id, wrong_name=search)
+                    try:
+                        is_misspelled = await asyncio.wait_for(ai_spell_check(chat_id=message.chat.id, wrong_name=search), timeout=6.0)
+                    except asyncio.TimeoutError:
+                        is_misspelled = None
                     if is_misspelled:
                         await ai_sts.edit(f'<b><i>✅ Aɪ Sᴜɢɢᴇsᴛᴇᴅ ᴍᴇ<code> {is_misspelled}</code> \nSᴏ Iᴍ SᴇᴀRᴄʜɪɴɢ ғᴏʀ <code>{is_misspelled}</code></i></b>')
                         await asyncio.sleep(2)
@@ -925,7 +924,7 @@ async def auto_filter(client, msg, spoll=False):
     
     imdb = await get_poster(search, file=(files[0]).file_name) if (settings.get("imdb") or settings.get("imdb_poster") or settings.get("show_imdb")) else None
     cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-    time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second + (cur_time.microsecond / 1000000))) - timedelta(hours=curr_time.hour, minutes=curr_time.minute, seconds=(curr_time.second + (curr_time.microsecond / 1000000)))
+    time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second + (cur_time.microsecond / 1000000))) - timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second + (cur_time.microsecond / 1000000)))
     remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
     DELETE_TIME = settings.get("auto_del_time", AUTO_DELETE_TIME)
     TEMPLATE = script.IMDB_TEMPLATE_TXT
@@ -980,7 +979,7 @@ async def auto_filter(client, msg, spoll=False):
             
             del_seconds = settings.get("auto_del_time", AUTO_DELETE_TIME)
             readable_time = get_readable_time(del_seconds)
-            cap += f"\n\n<blockquote>⚠️ <b>ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴀꜰᴛᴇʀ {readable_time} ᴛᴏ ᴀᴠᴏɪᴅ ᴄᴏᴘʏʀɪɢʜᴛ ɪꜱꜱᴜᴇꜱ 🗑</b></blockquote>"
+            cap += f"\n\n<blockquote>⚠️ <b>ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴀꜰᴛᴇ🇷 {readable_time} ᴛᴏ ᴀᴠᴏɪᴅ ᴄᴏᴘʏʀɪɢʜᴛ ɪꜱꜱᴜᴇꜱ 🗑</b></blockquote>"
     else:
         if settings.get('button'):
             cap = f"<b><blockquote>Hᴇʏ,{message.from_user.mention}</blockquote>\n\n📂 Hᴇʀᴇ I Fᴏᴜɴᴅ Fᴏʀ Yᴏᴜʀ SᴇᴀRᴄʜ <code>{search}</code></b>\n\n"
@@ -991,7 +990,7 @@ async def auto_filter(client, msg, spoll=False):
             
             del_seconds = settings.get("auto_del_time", AUTO_DELETE_TIME)
             readable_time = get_readable_time(del_seconds)
-            cap += f"<blockquote>⚠️ <b>ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴀꜰᴛᴇʀ {readable_time} ᴛᴏ ᴀᴠᴏɪᴅ ᴄᴏᴘʏʀɪɢʜᴛ ɪꜱꜱᴜᴇꜱ 🗑</b></blockquote>"
+            cap += f"<blockquote>⚠️ <b>ᴛʜɪꜱ ᴍᴇꜱꜱᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴀᴜᴛᴏ ᴅᴇʟᴇᴛᴇ ᴀꜰᴛᴇ🇷 {readable_time} ᴛᴏ ᴀᴠᴏɪᴅ ᴄᴏᴘʏʀɪɢʜᴛ ɪꜱꜱᴜᴇꜱ 🗑</b></blockquote>"
             
     try:
         if imdb and poster_url:
