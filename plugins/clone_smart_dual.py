@@ -73,8 +73,8 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
     if data == "add_source_url":
         user_input_state[user_id] = {"step": "awaiting_multi_url"}
         await callback_query.message.edit_text(
-            "🔗 **Step 1/2: Add Source MongoDB URL**\n\n"
-            "Please send the source database connection URI in chat:",
+            "🔗 **Step 1/3: Add Source MongoDB URL**\n\n"
+            "Please send your source MongoDB connection URI in chat:",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("« Back to Menu", callback_data="back_to_menu")]])
         )
         await callback_query.answer()
@@ -89,17 +89,13 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
         
         for i, src in enumerate(multi_clone_state["sources_list"], 1):
             url = src["url"]
+            db_name = src["database"]
             col_name = src["collection"]
             masked_url = url.split("@")[-1] if "@" in url else url
             file_count = 0
             
             try:
                 temp_client = MongoClient(url, serverSelectionTimeoutMS=4000)
-                db_name = temp_client.get_default_database().name
-                if "/" in url.split("?")[0]:
-                    path_parts = url.split("?")[0].split("/")
-                    if path_parts[-1]:
-                        db_name = path_parts[-1]
                 temp_db = temp_client[db_name]
                 file_count = temp_db[col_name].estimated_document_count()
             except Exception as e:
@@ -107,6 +103,7 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
             
             sources_text += (
                 f"{i}. `...{masked_url}`\n"
+                f"   🗄️ Database: `{db_name}`\n"
                 f"   📁 Collection: `{col_name}`\n"
                 f"   📦 Total Documents: **{file_count}**\n\n"
             )
@@ -184,21 +181,36 @@ async def capture_multi_url_input(client, message):
                 return
 
             user_input_state[user_id] = {
-                "step": "awaiting_collection_name",
+                "step": "awaiting_database_name",
                 "url": url
             }
             await message.reply_text(
-                "📁 **Step 2/2: Enter Target Collection Name**\n\n"
-                "Please type the exact collection name you want to read files from (e.g., `Sandy_files`, `sdyimdx`, `Media`):"
+                "🗄️ **Step 2/3: Enter Database Name**\n\n"
+                "Please type the name of the database you want to connect to (e.g., `telegram_bot`, `my_db`, `cluster0`):"
+            )
+
+        elif step == "awaiting_database_name":
+            db_name = message.text.strip()
+            url = state_data.get("url")
+
+            user_input_state[user_id] = {
+                "step": "awaiting_collection_name",
+                "url": url,
+                "database": db_name
+            }
+            await message.reply_text(
+                "📁 **Step 3/3: Enter Collection Name**\n\n"
+                "Please type the exact collection name you want to read files from (e.g., `sdyimdx`, `Media`, `files`):"
             )
 
         elif step == "awaiting_collection_name":
-            # Strict string strip to remove hidden spaces and newlines from button chat inputs
             col_name = message.text.strip()
             url = state_data.get("url")
+            db_name = state_data.get("database")
 
             multi_clone_state["sources_list"].append({
                 "url": url,
+                "database": db_name,
                 "collection": col_name
             })
             user_input_state.pop(user_id, None)
@@ -211,6 +223,7 @@ async def capture_multi_url_input(client, message):
             ])
             await message.reply_text(
                 f"✅ **Source Added Successfully!**\n\n"
+                f"• Database: `{db_name}`\n"
                 f"• Collection: `{col_name}`\n"
                 f"• Total sources configured: **{total_count}**",
                 reply_markup=keyboard
@@ -306,12 +319,7 @@ async def run_smart_cloning_process(client, message):
         for src in multi_clone_state["sources_list"]:
             try:
                 temp_client = MongoClient(src["url"], serverSelectionTimeoutMS=4000)
-                db_name = temp_client.get_default_database().name
-                if "/" in src["url"].split("?")[0]:
-                    path_parts = src["url"].split("?")[0].split("/")
-                    if path_parts[-1]:
-                        db_name = path_parts[-1]
-                temp_db = temp_client[db_name]
+                temp_db = temp_client[src["database"]]
                 multi_clone_state["total_estimated_docs"] += temp_db[src["collection"]].estimated_document_count()
             except Exception:
                 pass
@@ -323,15 +331,11 @@ async def run_smart_cloning_process(client, message):
                 break
 
             source_uri = src["url"]
+            db_name = src["database"].strip()
             collection_name = src["collection"].strip()
 
             try:
                 source_client = MongoClient(source_uri, serverSelectionTimeoutMS=10000)
-                db_name = source_client.get_default_database().name
-                if "/" in source_uri.split("?")[0]:
-                    path_parts = source_uri.split("?")[0].split("/")
-                    if path_parts[-1]:
-                        db_name = path_parts[-1]
                 source_db = source_client[db_name]
                 source_col = source_db[collection_name]
             except Exception as e:
