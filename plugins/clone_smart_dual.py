@@ -95,9 +95,10 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
             file_count = 0
             
             try:
-                temp_client = MongoClient(url, serverSelectionTimeoutMS=4000)
-                temp_db = temp_client[db_name]
-                file_count = temp_db[col_name].estimated_document_count()
+                def get_count():
+                    tc = MongoClient(url, serverSelectionTimeoutMS=4000)
+                    return tc[db_name][col_name].estimated_document_count()
+                file_count = await asyncio.to_thread(get_count)
             except Exception as e:
                 file_count = f"Error: {e}"
             
@@ -129,7 +130,7 @@ async def multi_clone_callback_handler(client, callback_query: CallbackQuery):
             return
 
         await callback_query.message.edit_text("🔄 **Initializing Smart Dual-DB cloning...**")
-        client.loop.create_task(run_smart_cloning_process(client, callback_query.message))
+        asyncio.create_task(run_smart_cloning_process(client, callback_query.message))
         await callback_query.answer()
 
     elif data == "pause_clone":
@@ -263,28 +264,37 @@ async def insert_batch_with_fallback(batch):
     inserted_count = 0
     skipped_count = 0
 
-    try:
-        result = Media.collection.insert_many(batch, ordered=False)
-        inserted_count = len(result.inserted_ids)
-    except BulkWriteError as bwe:
-        details = bwe.details
-        inserted_count = details.get('nInserted', 0)
-        skipped_count = len(batch) - inserted_count
-    except DuplicateKeyError:
-        skipped_count = len(batch)
-    except Exception as primary_error:
-        err_str = str(primary_error).lower()
-        if any(w in err_str for w in ["quota", "full", "block", "storage", "exceeded"]):
-            if MULTIPLE_DB and Media2:
-                try:
-                    result = Media2.collection.insert_many(batch, ordered=False)
-                    inserted_count = len(result.inserted_ids)
-                except BulkWriteError as bwe2:
-                    details2 = bwe2.details
-                    inserted_count = details2.get('nInserted', 0)
-                    skipped_count = len(batch) - inserted_count
-                except Exception:
-                    skipped_count = len(batch)
+    def do_inserts():
+        nonlocal inserted_count, skipped_count
+        try:
+            result = Media.collection.insert_many(batch, ordered=False)
+            inserted_count = len(result.inserted_ids)
+        except BulkWriteError as bwe:
+            details = bwe.details
+            inserted_count = details.get('nInserted', 0)
+            skipped_count = len(batch) - inserted_count
+        except DuplicateKeyError:
+            skipped_count = len(batch)
+        except Exception as primary_error:
+            err_str = str(primary_error).lower()
+            if any(w in err_str for w in ["quota", "full", "block", "storage", "exceeded"]):
+                if MULTIPLE_DB and Media2:
+                    try:
+                        result = Media2.collection.insert_many(batch, ordered=False)
+                        inserted_count = len(result.inserted_ids)
+                    except BulkWriteError as bwe2:
+                        details2 = bwe2.details
+                        inserted_count = details2.get('nInserted', 0)
+                        skipped_count = len(batch) - inserted_count
+                    except Exception:
+                        skipped_count = len(batch)
+                else:
+                    for doc in batch:
+                        try:
+                            Media.collection.insert_one(doc)
+                            inserted_count += 1
+                        except Exception:
+                            skipped_count += 1
             else:
                 for doc in batch:
                     try:
@@ -292,14 +302,8 @@ async def insert_batch_with_fallback(batch):
                         inserted_count += 1
                     except Exception:
                         skipped_count += 1
-        else:
-            for doc in batch:
-                try:
-                    Media.collection.insert_one(doc)
-                    inserted_count += 1
-                except Exception:
-                    skipped_count += 1
 
+    await asyncio.to_thread(do_inserts)
     return inserted_count, skipped_count
 
 async def run_smart_cloning_process(client, message):
@@ -318,9 +322,10 @@ async def run_smart_cloning_process(client, message):
     try:
         for src in multi_clone_state["sources_list"]:
             try:
-                temp_client = MongoClient(src["url"], serverSelectionTimeoutMS=4000)
-                temp_db = temp_client[src["database"]]
-                multi_clone_state["total_estimated_docs"] += temp_db[src["collection"]].estimated_document_count()
+                def get_est():
+                    tc = MongoClient(src["url"], serverSelectionTimeoutMS=4000)
+                    return tc[src["database"]][src["collection"]].estimated_document_count()
+                multi_clone_state["total_estimated_docs"] += await asyncio.to_thread(get_est)
             except Exception:
                 pass
 
@@ -335,18 +340,18 @@ async def run_smart_cloning_process(client, message):
             collection_name = src["collection"].strip()
 
             try:
-                source_client = MongoClient(source_uri, serverSelectionTimeoutMS=10000)
-                source_db = source_client[db_name]
-                source_col = source_db[collection_name]
+                def fetch_cursor():
+                    sc = MongoClient(source_uri, serverSelectionTimeoutMS=10000)
+                    return sc[db_name][collection_name].find({}).batch_size(2000)
+                cursor = await asyncio.to_thread(fetch_cursor)
             except Exception as e:
                 print(f"Connection error to source: {e}")
                 continue
 
             batch = []
-            cursor = source_col.find({}).batch_size(2000)
-            
             try:
-                for doc in cursor:
+                # Use to_thread or async fetching loop with yields
+                while True:
                     if multi_clone_state["is_cancelled"]:
                         break
 
@@ -358,9 +363,25 @@ async def run_smart_cloning_process(client, message):
                     if multi_clone_state["is_cancelled"]:
                         break
 
-                    clean_doc = dict(doc)
-                    clean_doc.pop("_id", None)
-                    batch.append(clean_doc)
+                    # Fetch docs in a non-blocking way
+                    def get_next_batch():
+                        chunk = []
+                        try:
+                            for _ in range(500):
+                                doc = cursor.next()
+                                chunk.append(doc)
+                        except StopIteration:
+                            pass
+                        return chunk
+
+                    docs_chunk = await asyncio.to_thread(get_next_batch)
+                    if not docs_chunk:
+                        break
+
+                    for doc in docs_chunk:
+                        clean_doc = dict(doc)
+                        clean_doc.pop("_id", None)
+                        batch.append(clean_doc)
 
                     if len(batch) >= 2000:
                         ins, skp = await insert_batch_with_fallback(batch)
@@ -371,8 +392,12 @@ async def run_smart_cloning_process(client, message):
                         multi_clone_state["skipped_count"] = grand_total_skipped
                         batch = []
                         await update_live_multi_panel(message)
+                        await asyncio.sleep(0.1) # Yield control back to telegram loop
             finally:
-                cursor.close()
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
 
             if batch and not multi_clone_state["is_cancelled"]:
                 ins, skp = await insert_batch_with_fallback(batch)
