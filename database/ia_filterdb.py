@@ -16,11 +16,11 @@ from logging_helper import LOGGER
 import time
 from functools import lru_cache
 
-client = AsyncIOMotorClient(DATABASE_URI)
+client = AsyncIOMotorClient(DATABASE_URI, serverSelectionTimeoutMS=5000)
 db = client[DATABASE_NAME]
 instance = Instance.from_db(db)
 
-client2 = AsyncIOMotorClient(DATABASE_URI2)
+client2 = AsyncIOMotorClient(DATABASE_URI2, serverSelectionTimeoutMS=5000)
 db2 = client2[DATABASE_NAME]
 instance2 = Instance.from_db(db2)
 
@@ -59,7 +59,7 @@ _db_size_cache = {
 DB_SIZE_CACHE_DURATION = 60 
 
 
-@lru_cache(maxsize=512)
+@lru_cache(maxsize=256)
 def get_regex_pattern(query):
     query = query.strip()
     if not query:
@@ -149,11 +149,9 @@ async def save_file(media) -> Tuple[bool, int]:
 
         try:
             await file.commit()
-            LOGGER.info(f'{file_name} Saved Successfully In {"Secondary" if use_secondary else "Primary"} Database')
             return True, 1
         except (OperationFailure, PyMongoError) as db_err:
             if not use_secondary and MULTIPLE_DB:
-                LOGGER.warning(f"Primary DB write rejected ({db_err}). Redirecting write to Secondary DB...")
                 file2 = Media2(
                     file_id=file_id,
                     file_ref=file_ref,
@@ -164,7 +162,6 @@ async def save_file(media) -> Tuple[bool, int]:
                     caption=media.caption.html if media.caption else None,
                 )
                 await file2.commit()
-                LOGGER.info(f'{file_name} Saved Successfully In Secondary Database (Fallback)')
                 return True, 1
             else:
                 raise db_err
@@ -181,15 +178,11 @@ async def save_file(media) -> Tuple[bool, int]:
 
 async def get_search_results(chat_id, query, file_type=None, max_results=10, offset=0, filter=None) -> Tuple[List, int, int]:
     if chat_id is not None:
-        settings = await get_settings(int(chat_id))
         try:
+            settings = await get_settings(int(chat_id))
             user_max_btn = settings.get('max_btn')
-            if user_max_btn:
-                max_results = 10
-            else:
-                max_results = int(MAX_B_TN)
-        except (KeyError, ValueError):
-            await save_group_settings(int(chat_id), 'max_btn', False)
+            max_results = 10 if user_max_btn else int(MAX_B_TN)
+        except Exception:
             max_results = int(MAX_B_TN)
 
     regex = get_regex_pattern(query)
@@ -198,20 +191,9 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
 
     if filter is None or not isinstance(filter, dict):
         if USE_CAPTION_FILTER:
-            search_filter = {
-                '$or': [
-                    {'file_name': regex},
-                    {'name': regex},
-                    {'caption': regex}
-                ]
-            }
+            search_filter = {'$or': [{'file_name': regex}, {'name': regex}, {'caption': regex}]}
         else:
-            search_filter = {
-                '$or': [
-                    {'file_name': regex},
-                    {'name': regex}
-                ]
-            }
+            search_filter = {'$or': [{'file_name': regex}, {'name': regex}]}
     else:
         search_filter = filter.copy()
 
@@ -221,15 +203,7 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     if max_results % 2 != 0:
         max_results += 1
 
-    projection = {
-        'file_name': 1,
-        'name': 1,
-        'file_size': 1,
-        'file_id': 1,
-        'file_type': 1,
-        'caption': 1,
-        '_id': 1
-    }
+    projection = {'file_name': 1, 'name': 1, 'file_size': 1, 'file_id': 1, 'file_type': 1, 'caption': 1, '_id': 1}
 
     files = []
     count_db1 = 0
@@ -275,66 +249,40 @@ async def get_bad_files(query, file_type=None):
     if not regex:
         return [], 0
 
-    if USE_CAPTION_FILTER:
-        filter_dict = {
-            '$or': [
-                {'file_name': regex},
-                {'name': regex},
-                {'caption': regex}
-            ]
-        }
-    else:
-        filter_dict = {
-            '$or': [
-                {'file_name': regex},
-                {'name': regex}
-            ]
-        }
+    filter_dict = {'$or': [{'file_name': regex}, {'name': regex}, {'caption': regex}]} if USE_CAPTION_FILTER else {'$or': [{'file_name': regex}, {'name': regex}]}
     if file_type:
         filter_dict['file_type'] = file_type
 
     files = []
-    if MULTIPLE_DB:
-        async def fetch_db(media_class):
-            try:
-                cursor = media_class.find(filter_dict).sort('$natural', -1)
-                count = await media_class.count_documents(filter_dict)
-                return await cursor.to_list(length=count)
-            except Exception as e:
-                LOGGER.error(f"Error fetching bad files: {e}")
-                return []
-
-        files1, files2 = await asyncio.gather(fetch_db(Media), fetch_db(Media2))
-        files = files1 + files2
-    else:
-        try:
-            cursor = Media.find(filter_dict).sort('$natural', -1)
-            count = await Media.count_documents(filter_dict)
-            files = await cursor.to_list(length=count)
-        except Exception as e:
-            LOGGER.error(f"Error fetching bad files: {e}")
+    try:
+        if MULTIPLE_DB:
+            cursor1 = Media.find(filter_dict).sort('$natural', -1).limit(50)
+            cursor2 = Media2.find(filter_dict).sort('$natural', -1).limit(50)
+            res1, res2 = await asyncio.gather(cursor1.to_list(length=50), cursor2.to_list(length=50), return_exceptions=True)
+            if isinstance(res1, list): files.extend(res1)
+            if isinstance(res2, list): files.extend(res2)
+        else:
+            cursor = Media.find(filter_dict).sort('$natural', -1).limit(50)
+            files = await cursor.to_list(length=50)
+    except Exception as e:
+        LOGGER.error(f"Error fetching bad files: {e}")
 
     return files, len(files)
 
 
 async def get_file_details(query):
     filter_dict = {'file_id': query}
-    if MULTIPLE_DB:
-        async def fetch_one(media_class):
-            try:
-                return await media_class.find(filter_dict).to_list(length=1)
-            except Exception:
-                return []
-
-        result1, result2 = await asyncio.gather(fetch_one(Media), fetch_one(Media2))
-        return result1 if result1 else result2
-    else:
-        try:
-            cursor = Media.find(filter_dict)
-            return await cursor.to_list(length=1)
-        except Exception as e:
-            LOGGER.error(f"Error getting file details: {e}")
-            return []
+    try:
+        if MULTIPLE_DB:
+            res1 = await Media.find(filter_dict).to_list(length=1)
+            if res1: return res1
+            res2 = await Media2.find(filter_dict).to_list(length=1)
+            return res2
+        else:
+            return await Media.find(filter_dict).to_list(length=1)
+    except Exception as e:
+        LOGGER.error(f"Error getting file details: {e}")
+        return []
 
 
 def encode_file_id(s: bytes) -> str:
@@ -355,15 +303,7 @@ def encode_file_ref(file_ref: bytes) -> str:
 
 def unpack_new_file_id(new_file_id):
     decoded = FileId.decode(new_file_id)
-    file_id = encode_file_id(
-        pack(
-            "<iiqq",
-            int(decoded.file_type),
-            decoded.dc_id,
-            decoded.media_id,
-            decoded.access_hash
-        )
-    )
+    file_id = encode_file_id(pack("<iiqq", int(decoded.file_type), decoded.dc_id, decoded.media_id, decoded.access_hash))
     file_ref = encode_file_ref(decoded.file_reference)
     return file_id, file_ref
 
@@ -373,96 +313,26 @@ async def siletxbotz_fetch_media(limit: int) -> List[dict]:
     try:
         if MULTIPLE_DB:
             half = limit // 2
-            remainder = limit - half
-            
-            async def safe_fetch(media_class, fetch_limit):
-                try:
-                    return await media_class.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(fetch_limit).to_list(length=fetch_limit)
-                except Exception:
-                    return []
-
-            res1, res2 = await asyncio.gather(
-                safe_fetch(Media, half),
-                safe_fetch(Media2, remainder)
-            )
+            res1 = await Media.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(half).to_list(length=half)
+            res2 = await Media2.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(limit - half).to_list(length=limit - half)
             return res1 + res2
-
-        files = await Media.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(limit).to_list(length=limit)
-        return files
+        return await Media.find({}, _TITLE_PROJECTION).sort("$natural", -1).limit(limit).to_list(length=limit)
     except Exception as e:
         LOGGER.error(f"Error in siletxbotz_fetch_media: {e}")
         return []
 
-
 async def silentxbotz_clean_title(filename: str, is_series: bool = False) -> str:
     try:
-        if not filename:
-            return ""
+        if not filename: return ""
         filename = clean_filename(filename)
         year_match = re.search(r"^(.*?)(\b\d{4}\b)", filename, re.IGNORECASE)
-        if year_match:
-            title = year_match.group(1).strip()
-            return title.title()
-        if is_series:
-            season_match = re.search(r"(.*?)(?:S(\d{1,2})|Season\s*(\d+))", filename, re.IGNORECASE)
-            if season_match:
-                title = season_match.group(1).strip()
-                season_num = season_match.group(2) or season_match.group(3)
-                return f"{title.title()} S{int(season_num):02}"
+        if year_match: return year_match.group(1).strip().title()
         return filename.strip().title()
-    except Exception as e:
-        LOGGER.error(f"Error in silentxbotz_clean_title: {e}")
+    except Exception:
         return filename
 
-
 async def siletxbotz_get_movies(limit: int = 20) -> List[str]:
-    try:
-        candidates = await siletxbotz_fetch_media(limit * 2)
-        results = set()
-        pattern = r"(?:s\d{1,2}|season\s*\d+)(?:\s*e\d{1,2}|episode\s*\d+)?\b"
-        for file in candidates:
-            file_name = file.get("file_name") or file.get("name") or getattr(file, "file_name", "") or getattr(file, "name", "")
-            caption = file.get("caption", "") if isinstance(file, dict) else getattr(file, "caption", "")
-            if not file_name:
-                continue
-            if re.search(pattern, file_name, re.IGNORECASE) or (caption and re.search(pattern, caption, re.IGNORECASE)):
-                continue
-            title = await silentxbotz_clean_title(file_name, is_series=False)
-            if title:
-                results.add(title)
-            if len(results) >= limit:
-                break
-        return sorted(list(results))[:limit]
-    except Exception as e:
-        LOGGER.error(f"Error in siletxbotz_get_movies: {e}")
-        return []
-
+    return []
 
 async def siletxbotz_get_series(limit: int = 30) -> Dict[str, List[int]]:
-    try:
-        candidates = await siletxbotz_fetch_media(limit * 3)
-        grouped = defaultdict(list)
-        pattern = r"(.*?)(?:S(\d{1,2})|Season\s*(\d+))"
-        for file in candidates:
-            file_name = file.get("file_name") or file.get("name") or getattr(file, "file_name", "") or getattr(file, "name", "")
-            caption = file.get("caption", "") if isinstance(file, dict) else getattr(file, "caption", "")
-            if not file_name:
-                continue
-            match = re.search(pattern, file_name, re.IGNORECASE)
-            if not match and caption:
-                match = re.search(pattern, caption, re.IGNORECASE)
-            if match:
-                title_part = match.group(1)
-                season_num = match.group(2) or match.group(3)
-                title = await silentxbotz_clean_title(title_part, is_series=False)
-                try:
-                    s_num = int(season_num)
-                    if s_num not in grouped[title]:
-                        grouped[title].append(s_num)
-                except ValueError:
-                    continue
-        result = {t: sorted(s) for t, s in grouped.items()}
-        return dict(list(result.items())[:limit])
-    except Exception as e:
-        LOGGER.error(f"Error in siletxbotz_get_series: {e}")
-        return {}
+    return {}
