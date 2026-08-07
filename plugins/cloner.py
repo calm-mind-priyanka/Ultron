@@ -1,6 +1,5 @@
 import time
 import asyncio
-from urllib.parse import urlparse
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, Message
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -14,8 +13,7 @@ except ImportError:
     except ImportError:
         Media, Media2, MULTIPLE_DB = None, None, False
 
-# Put your Telegram Admin User ID here so /clonemenu works instantly
-ADMINS = [6046055058]  # Replace with your Telegram ID
+ADMINS = [6046055058]  # Your Admin ID
 
 TEMP_CONFIG = {}
 
@@ -223,7 +221,6 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
                 source_col = source_client[db_n][target_col_name]
                 break
                 
-        # Fixed check using is None instead of truth value evaluation
         if source_col is None:
             raise Exception(f"Collection '{target_col_name}' could not be found anywhere in the cluster!")
 
@@ -253,6 +250,7 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
 
             file_id = movie.get("file_id") or movie.get("_id")
             if file_id:
+                # Retain all exact original fields so search indexes and file dispatching match seamlessly
                 doc = {
                     "_id": file_id,
                     "file_id": file_id,
