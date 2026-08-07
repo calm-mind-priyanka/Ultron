@@ -6,7 +6,6 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQ
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import InsertOne
 
-# Safe Imports for Project Files
 try:
     from ia_filterdb import Media, Media2, MULTIPLE_DB
 except ImportError:
@@ -15,8 +14,8 @@ except ImportError:
     except ImportError:
         Media, Media2, MULTIPLE_DB = None, None, False
 
-# ⚠️ PUT YOUR TELEGRAM ADMIN USER ID(S) HERE TO MAKE /clonemenu WORK INSTANTLY:
-ADMINS = [6046055058]  # Replace 123456789 with your actual Telegram User ID!
+# Put your Telegram Admin User ID here so /clonemenu works instantly
+ADMINS = [6046055058]  # Replace with your Telegram ID
 
 TEMP_CONFIG = {}
 
@@ -54,7 +53,7 @@ async def show_main_menu(message: Message, edit: bool = False):
         f"⚡ **Ultra-Fast Bulk Movie Cloner**\n\n"
         f"🔗 **Source URL:** `{display_url}`\n"
         f"📑 **Collection Name:** `{src_col}`\n\n"
-        f"Target Databases: **Connected (Bulk Mode Active)**\n"
+        f"Target Databases: **Connected (Auto-Detect Active)**\n"
         f"Click below to configure or view stats:"
     )
 
@@ -99,7 +98,7 @@ async def handle_button_actions(client: Client, query: CallbackQuery):
         config["waiting_for"] = "source_col"
         await query.message.edit_text(
             "📑 **Enter Source Collection Name**\n\n"
-            "Please send the collection name where movie files are stored (e.g., `Sandy_files`):",
+            "Please send the collection name where movie files are stored (e.g., `sdyimdx`):",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Cancel / Back", callback_data="back_to_main")]])
         )
         await query.answer()
@@ -108,34 +107,34 @@ async def handle_button_actions(client: Client, query: CallbackQuery):
         if not config.get("source_url") or not config.get("source_col"):
             return await query.answer("⚠️ Please set both Source URL and Collection Name first!", show_alert=True)
         
-        await query.answer("📊 Analyzing source database...")
+        await query.answer("📊 Scanning databases for collection...")
         try:
             temp_client = AsyncIOMotorClient(config["source_url"])
-            parsed_url = urlparse(config["source_url"])
-            db_name = parsed_url.path.lstrip('/')
-            if not db_name or db_name.startswith('?'):
-                db_name = "test"
-            else:
-                db_name = db_name.split('?')[0]
-
-            temp_db = temp_client[db_name]
-            collections = await temp_db.list_collection_names()
+            target_col_name = config.get("source_col")
             
+            # Robust Auto-Scan: Inspect cluster databases to find where the collection lives
+            dbs = await temp_client.list_database_names()
+            found_db = None
             file_count = 0
-            if config.get("source_col") in collections:
-                file_count = await temp_db[config["source_col"]].count_documents({})
-            
-            user_count = 0
-            for coll in collections:
-                if any(name in coll.lower() for name in ["user", "users"]):
-                    user_count += await temp_db[coll].count_documents({})
+
+            for db_n in dbs:
+                if db_n in ["admin", "local", "config"]:
+                    continue
+                colls = await temp_client[db_n].list_collection_names()
+                if target_col_name in colls:
+                    found_db = db_n
+                    file_count = await temp_client[db_n][target_col_name].count_documents({})
+                    break
+
+            if not found_db:
+                found_db = "Cluster Default"
+                file_count = 0
 
             stats_text = (
                 f"📊 **Source Database Analytics**\n\n"
-                f"🗂️ Auto-detected DB Name: `{db_name}`\n"
-                f"📁 Movie Files in Collection: `{file_count}`\n"
-                f"👤 Estimated Source Users Found: `{user_count}`\n"
-                f"✨ *(Note: Bulk Mode active for maximum transfer speeds)*"
+                f"🗂️ Matched DB Name: `{found_db}`\n"
+                f"📁 Movie Files Found: `{file_count}`\n"
+                f"✨ *(Status: Ready for ultra-fast copying)*"
             )
             
             await query.message.edit_text(
@@ -143,7 +142,7 @@ async def handle_button_actions(client: Client, query: CallbackQuery):
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Back to Menu", callback_data="back_to_main")]])
             )
         except Exception as e:
-            await query.answer(f"Failed to fetch stats: {str(e)[:50]}", show_alert=True)
+            await query.answer(f"Failed: {str(e)[:40]}", show_alert=True)
 
     elif data == "back_to_main":
         config["waiting_for"] = None
@@ -162,7 +161,7 @@ async def handle_button_actions(client: Client, query: CallbackQuery):
         if CLONE_STATUS["is_running"]:
             return await query.answer("⚠️ A copy process is already running!", show_alert=True)
 
-        await query.answer("🚀 Initializing Ultra-Fast Bulk Migration...")
+        await query.answer("🚀 Initializing Smart Bulk Migration...")
         asyncio.create_task(run_bulk_cloner(client, query.message, config))
 
     elif data == "pause_copy":
@@ -212,16 +211,22 @@ async def capture_button_inputs(client: Client, message: Message):
 async def run_bulk_cloner(client: Client, message: Message, config: dict):
     try:
         source_client = AsyncIOMotorClient(config["source_url"])
-        parsed_url = urlparse(config["source_url"])
-        db_name = parsed_url.path.lstrip('/')
-        if not db_name or db_name.startswith('?'):
-            db_name = "test"
-        else:
-            db_name = db_name.split('?')[0]
-
-        source_db = source_client[db_name]
-        source_col = source_db[config["source_col"]]
+        target_col_name = config["source_col"]
         
+        dbs = await source_client.list_database_names()
+        source_col = None
+        
+        for db_n in dbs:
+            if db_n in ["admin", "local", "config"]:
+                continue
+            colls = await source_client[db_n].list_collection_names()
+            if target_col_name in colls:
+                source_col = source_client[db_n][target_col_name]
+                break
+                
+        if not source_col:
+            raise Exception(f"Collection '{target_col_name}' could not be found anywhere in the cluster!")
+
         CLONE_STATUS["total_files"] = await source_col.count_documents({})
         cursor = source_col.find({})
         
