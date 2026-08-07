@@ -15,10 +15,8 @@ except ImportError:
     except ImportError:
         Media, Media2, MULTIPLE_DB = None, None, False
 
-try:
-    from Info import ADMINS
-except ImportError:
-    ADMINS = []
+# ⚠️ PUT YOUR TELEGRAM ADMIN USER ID(S) HERE TO MAKE /clonemenu WORK INSTANTLY:
+ADMINS = [6046055058]  # Replace 123456789 with your actual Telegram User ID!
 
 TEMP_CONFIG = {}
 
@@ -34,7 +32,7 @@ def is_admin(_, __, message: Message):
     user = message.from_user
     if not user:
         return False
-    return user.id in ADMINS or user.username in ADMINS
+    return user.id in ADMINS or str(user.id) in [str(x) for x in ADMINS]
 
 admin_filter = filters.create(is_admin)
 
@@ -80,7 +78,7 @@ async def show_main_menu(message: Message, edit: bool = False):
 
 @Client.on_callback_query(filters.regex("^(btn_set_url|btn_set_col|show_source_stats|start_copy|pause_copy|resume_copy|stop_copy|reset_config|home_menu|back_to_main)$"))
 async def handle_button_actions(client: Client, query: CallbackQuery):
-    if query.from_user.id not in ADMINS:
+    if query.from_user.id not in ADMINS and str(query.from_user.id) not in [str(x) for x in ADMINS]:
         return await query.answer("⚠️ You are not authorized to use this!", show_alert=True)
 
     chat_id = query.from_user.id
