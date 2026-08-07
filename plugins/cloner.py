@@ -6,9 +6,19 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQ
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import InsertOne
 
-# Import database models and ADMINS list from your project files
-from ia_filterdb import Media, Media2, MULTIPLE_DB
-from Info import ADMINS
+# Safe Imports for Project Files
+try:
+    from ia_filterdb import Media, Media2, MULTIPLE_DB
+except ImportError:
+    try:
+        from database.ia_filterdb import Media, Media2, MULTIPLE_DB
+    except ImportError:
+        Media, Media2, MULTIPLE_DB = None, None, False
+
+try:
+    from Info import ADMINS
+except ImportError:
+    ADMINS = []
 
 TEMP_CONFIG = {}
 
@@ -222,10 +232,11 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
         CLONE_STATUS["start_time"] = time.time()
         CLONE_STATUS["copied_files"] = 0
 
-        # Get raw underlying motor collection to perform high-speed bulk inserts
-        target_collection = Media.collection
+        if Media is None:
+            raise Exception("Media database model could not be imported from your project!")
 
-        batch_size = 5000  # Process 5,000 documents per batch chunk
+        target_collection = Media.collection
+        batch_size = 5000
         bulk_operations = []
 
         async for movie in cursor:
@@ -239,7 +250,6 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
 
             file_id = movie.get("file_id") or movie.get("_id")
             if file_id:
-                # Prepare document matching target model schema
                 doc = {
                     "_id": file_id,
                     "file_id": file_id,
@@ -250,22 +260,18 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
                     "mime_type": movie.get("mime_type"),
                     "caption": movie.get("caption")
                 }
-                # Use upsert or ordered insert with duplicate handling via bypass
                 bulk_operations.append(InsertOne(doc))
 
-            # When batch hits 5,000 files, flush them to MongoDB in one go
             if len(bulk_operations) >= batch_size:
                 try:
-                    # ordered=False allows it to skip duplicate errors instantly and keep writing at peak speed
                     await target_collection.bulk_write(bulk_operations, ordered=False)
                 except Exception:
-                    pass  # Safely ignore duplicate key constraint drops
+                    pass
                 
                 CLONE_STATUS["copied_files"] += len(bulk_operations)
                 bulk_operations = []
                 await update_status_ui(message, "RUNNING")
 
-        # Flush any remaining files left in the final batch
         if bulk_operations and CLONE_STATUS["is_running"]:
             try:
                 await target_collection.bulk_write(bulk_operations, ordered=False)
