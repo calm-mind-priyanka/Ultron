@@ -548,7 +548,7 @@ async def cb_handler(client: Client, query: CallbackQuery):
         
     elif query.data.startswith("unavailable"):
         await handle_alert_status(client, query, "• ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ •",
-                                  "<b>Hᴇʏ {user_mention},</b>\n\n<u>{content}</u> Hᴀs Bᴇᴇɴ Mᴀʀᴋᴇᴅ Aᴅ ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ...💔",
+                                  "<b>Hᴇʏ {user_mention},</b>\n\n<u>{content}</u> Hᴀs BᴇᴇN Mᴀʀᴋᴇᴅ Aᴅ ᴜɴᴀᴠᴀɪʟᴀʙʟᴇ...💔",
                                   "#Uɴᴀᴠᴀɪʟᴀʙʟᴇ ⚠️")
 
     elif query.data.startswith("Not_Released"):
@@ -871,16 +871,22 @@ async def auto_filter(client, msg, spoll=False):
                 if settings["spell_check"]:
                     ai_sts = await m.edit('🤖 ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ, ᴀɪ ɪꜱ ᴄʜᴇᴄᴋɪɴɢ ʏᴏᴜʀ ꜱᴘᴇʟʟɪɴɢ...')
                     try:
-                        is_misspelled = await asyncio.wait_for(ai_spell_check(chat_id=message.chat.id, wrong_name=search), timeout=6.0)
+                        is_misspelled = await asyncio.wait_for(ai_spell_check(chat_id=message.chat.id, wrong_name=search), timeout=4.0)
                     except asyncio.TimeoutError:
                         is_misspelled = None
                     if is_misspelled:
                         await ai_sts.edit(f'<b><i>✅ Aɪ Sᴜɢɢᴇsᴛᴇᴅ ᴍᴇ<code> {is_misspelled}</code> \nSᴏ Iᴍ SᴇᴀRᴄʜɪɴɢ ғᴏʀ <code>{is_misspelled}</code></i></b>')
-                        await asyncio.sleep(2)
+                        await asyncio.sleep(1)
                         message.text = is_misspelled
-                        await ai_sts.delete()
+                        try:
+                            await ai_sts.delete()
+                        except Exception:
+                            pass
                         return await auto_filter(client, message)
-                    await ai_sts.delete()
+                    try:
+                        await ai_sts.delete()
+                    except Exception:
+                        pass
                     return await advantage_spell_chok(client, message)
         else:
             return
@@ -889,7 +895,10 @@ async def auto_filter(client, msg, spoll=False):
         search, files, offset, total_results = spoll
         m = await message.reply_text(f'<b>{message.from_user.mention} 🎯 Searching... <i>{search}</i></b>', reply_to_message_id=message.id)
         settings = await get_settings(message.chat.id)
-        await msg.message.delete()
+        try:
+            await msg.message.delete()
+        except Exception:
+            pass
     
     key = f"{message.chat.id}-{message.id}"
     FRESH[key] = search
@@ -922,10 +931,13 @@ async def auto_filter(client, msg, spoll=False):
     else:
         btn.append([InlineKeyboardButton(text="↭ ɴᴏ ᴍᴏʀᴇ ᴘᴀɢᴇꜱ ᴀᴠᴀɪʟᴀʙʟᴇ ↭", callback_data="pages")])
     
-    imdb = await get_poster(search, file=(files[0]).file_name) if (settings.get("imdb") or settings.get("imdb_poster") or settings.get("show_imdb")) else None
-    cur_time = datetime.now(pytz.timezone('Asia/Kolkata')).time()
-    time_difference = timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second + (cur_time.microsecond / 1000000))) - timedelta(hours=cur_time.hour, minutes=cur_time.minute, seconds=(cur_time.second + (cur_time.microsecond / 1000000)))
-    remaining_seconds = "{:.2f}".format(time_difference.total_seconds())
+    imdb = None
+    try:
+        if (settings.get("imdb") or settings.get("imdb_poster") or settings.get("show_imdb")) and files:
+            imdb = await get_poster(search, file=(files[0]).file_name)
+    except Exception:
+        pass
+
     DELETE_TIME = settings.get("auto_del_time", AUTO_DELETE_TIME)
     TEMPLATE = script.IMDB_TEMPLATE_TXT
     poster_url = None
@@ -1053,53 +1065,42 @@ async def auto_filter(client, msg, spoll=False):
         pass
 
 async def ai_spell_check(chat_id, wrong_name):
-    async def search_movie(wrong_name):
-        search_results = await asyncio.to_thread(imdb.search_movie, wrong_name)
-        movie_list = [movie.title for movie in search_results.titles]
-        return movie_list
-    movie_list = await search_movie(wrong_name)
-    if not movie_list:
-        return
-    for _ in range(5):
-        closest_match = process.extractOne(wrong_name, movie_list)
-        if not closest_match or closest_match[1] <= 80:
-            return 
-        movie = closest_match[0]
-        files, offset, total_results = await get_search_results(chat_id=chat_id, query=movie)
-        if files:
-            return movie
-        movie_list.remove(movie)
+    try:
+        async def search_movie(wrong_name):
+            search_results = await asyncio.to_thread(imdb.search_movie, wrong_name)
+            return [movie.title for movie in search_results.titles]
+        movie_list = await search_movie(wrong_name)
+        if not movie_list:
+            return None
+        for _ in range(3):
+            closest_match = process.extractOne(wrong_name, movie_list)
+            if not closest_match or closest_match[1] <= 80:
+                return None
+            movie = closest_match[0]
+            files, offset, total_results = await get_search_results(chat_id=chat_id, query=movie)
+            if files:
+                return movie
+            movie_list.remove(movie)
+    except Exception:
+        return None
+    return None
 
 async def advantage_spell_chok(client, message):
-    mv_id = message.id
     search = message.text
-    chat_id = message.chat.id
-    settings = await get_settings(chat_id)
-    query = re.sub(
-        r"\b(pl(i|e)*?(s|z+|ease|se|ese|(e+)s(e)?)|((send|snd|giv(e)?|gib)(\sme)?)|movie(s)?|new|latest|br((o|u)h?)*|^h(e|a)?(l)*(o)*|mal(ayalam)?|t(h)?amil|file|that|find|und(o)*|kit(t(i|y)?)?o(w)?|thar(u)?(o)*w?|kittum(o)*|aya(k)*(um(o)*)?|full\smovie|any(one)|with\ssubtitle(s)?)",
-        "", message.text, flags=re.IGNORECASE)
-    query = query.strip() + " movie"
     try:
         movies = await get_poster(search, bulk=True)
     except Exception:
-        k = await message.reply(script.I_CUDNT.format(message.from_user.mention))
-        await asyncio.sleep(60)
-        await k.delete()
-        try:
-            await message.delete()
-        except Exception:
-            pass
-        return
+        movies = None
+
     if not movies:
         google = search.replace(" ", "+")
         button = [[
             InlineKeyboardButton("🔍 ᴄʜᴇᴄᴋ sᴘᴇʟʟɪɴɢ ᴏɴ ɢᴏᴏɢʟᴇ 🔍", url=f"https://www.google.com/search?q={google}")
         ]]
         k = await message.reply_text(text=script.I_CUDNT.format(search), reply_markup=InlineKeyboardMarkup(button))
-        await asyncio.sleep(60)
-        await k.delete()
+        await asyncio.sleep(20)
         try:
-            await message.delete()
+            await k.delete()
         except Exception:
             pass
         return
@@ -1113,9 +1114,8 @@ async def advantage_spell_chok(client, message):
         [InlineKeyboardButton(text="🚫 ᴄʟᴏsᴇ 🚫", callback_data='close_data')]
     )
     d = await message.reply_text(text=script.CUDNT_FND.format(message.from_user.mention), reply_markup=InlineKeyboardMarkup(buttons), reply_to_message_id=message.id)
-    await asyncio.sleep(60)
-    await d.delete()
+    await asyncio.sleep(20)
     try:
-        await message.delete()
+        await d.delete()
     except Exception:
         pass
