@@ -6,12 +6,14 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo import InsertOne
 
 try:
-    from ia_filterdb import Media, Media2, MULTIPLE_DB
+    from ia_filterdb import Media, Media2, MULTIPLE_DB, clean_filename, unpack_new_file_id
 except ImportError:
     try:
-        from database.ia_filterdb import Media, Media2, MULTIPLE_DB
+        from database.ia_filterdb import Media, Media2, MULTIPLE_DB, clean_filename, unpack_new_file_id
     except ImportError:
         Media, Media2, MULTIPLE_DB = None, None, False
+        clean_filename = lambda x: x
+        unpack_new_file_id = None
 
 ADMINS = [6046055058]  # Your Admin ID
 
@@ -236,7 +238,7 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
             raise Exception("Media database model could not be imported from your project!")
 
         target_collection = Media.collection
-        batch_size = 5000
+        batch_size = 5000  # Updated batch size to 5000
         bulk_operations = []
 
         async for movie in cursor:
@@ -248,18 +250,33 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
             if not CLONE_STATUS["is_running"]:
                 break
 
-            file_id = movie.get("file_id") or movie.get("_id")
-            if file_id:
-                # Retain all exact original fields so search indexes and file dispatching match seamlessly
+            raw_file_id = movie.get("file_id") or movie.get("_id")
+            if raw_file_id:
+                file_ref = movie.get("file_ref")
+                
+                # Automatically decode and harmonize file references if unpack function is available
+                if unpack_new_file_id:
+                    try:
+                        parsed_id, parsed_ref = unpack_new_file_id(raw_file_id)
+                        if parsed_id:
+                            raw_file_id = parsed_id
+                        if parsed_ref and not file_ref:
+                            file_ref = parsed_ref
+                    except Exception:
+                        pass
+
+                raw_filename = movie.get("file_name", "unknown")
+                cleaned_name = clean_filename(raw_filename) if clean_filename else raw_filename
+
                 doc = {
-                    "_id": file_id,
-                    "file_id": file_id,
-                    "file_ref": movie.get("file_ref"),
-                    "file_name": movie.get("file_name"),
-                    "file_size": movie.get("file_size"),
-                    "file_type": movie.get("file_type"),
-                    "mime_type": movie.get("mime_type"),
-                    "caption": movie.get("caption")
+                    "_id": raw_file_id,
+                    "file_id": raw_file_id,
+                    "file_ref": file_ref,
+                    "file_name": cleaned_name,
+                    "file_size": movie.get("file_size", 0),
+                    "file_type": movie.get("file_type", "document"),
+                    "mime_type": movie.get("mime_type", "video/mp4"),
+                    "caption": movie.get("caption", "")
                 }
                 bulk_operations.append(InsertOne(doc))
 
@@ -271,7 +288,10 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
                 
                 CLONE_STATUS["copied_files"] += len(bulk_operations)
                 bulk_operations = []
-                await update_status_ui(message, "RUNNING")
+                try:
+                    await update_status_ui(message, "RUNNING")
+                except Exception:
+                    pass
 
         if bulk_operations and CLONE_STATUS["is_running"]:
             try:
@@ -281,7 +301,7 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
             CLONE_STATUS["copied_files"] += len(bulk_operations)
 
         CLONE_STATUS["is_running"] = False
-        await message.edit_text("⚡ **Ultra-Fast Bulk Cloning Completed Successfully!**")
+        await message.edit_text("⚡ **Ultra-Fast Bulk Cloning & File Harmonization Completed Successfully!**")
 
     except Exception as e:
         CLONE_STATUS["is_running"] = False
