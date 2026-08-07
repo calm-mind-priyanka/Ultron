@@ -112,7 +112,6 @@ async def handle_button_actions(client: Client, query: CallbackQuery):
             temp_client = AsyncIOMotorClient(config["source_url"])
             target_col_name = config.get("source_col")
             
-            # Robust Auto-Scan: Inspect cluster databases to find where the collection lives
             dbs = await temp_client.list_database_names()
             found_db = None
             file_count = 0
@@ -224,7 +223,8 @@ async def run_bulk_cloner(client: Client, message: Message, config: dict):
                 source_col = source_client[db_n][target_col_name]
                 break
                 
-        if not source_col:
+        # Fixed check using is None instead of truth value evaluation
+        if source_col is None:
             raise Exception(f"Collection '{target_col_name}' could not be found anywhere in the cluster!")
 
         CLONE_STATUS["total_files"] = await source_col.count_documents({})
