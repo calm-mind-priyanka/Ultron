@@ -1,20 +1,21 @@
 """
-Advanced MongoDB -> MongoDB clone manager for the bot.
+Advanced MongoDB -> MongoDB clone manager.
 
 Install as: plugins/clone.py
 
-Flow:
+Features:
 - /clonemenu (admins only)
 - Add Source -> MongoDB URL -> Database Name -> Collection Name
 - Multiple saved sources
-- Every submenu has a Back button
-- Direct MongoDB-to-MongoDB transfer (no Telegram download/re-upload)
+- Back button on every submenu
+- Direct MongoDB-to-MongoDB transfer
+- Only the selected source collection is cloned
 - Bulk upserts in batches
-- Automatic destination selection between Media and Media2
 - Duplicate-safe cloning
+- Automatic destination selection between Media and Media2
 - Progress / cancel / pause / resume
 - Target statistics
-- Only the selected source collection is cloned
+- Atlas-compatible cursor (NO no_cursor_timeout=True)
 """
 
 import asyncio
@@ -30,10 +31,16 @@ from pymongo.errors import OperationFailure, BulkWriteError
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-from info import ADMINS, DATABASE_URI, DATABASE_NAME, COLLECTION_NAME, MULTIPLE_DB, DB_CHANGE_LIMIT
+import info
+from info import ADMINS, DATABASE_URI, DATABASE_NAME, COLLECTION_NAME
 from database.ia_filterdb import Media, Media2, check_db_size
 from logging_helper import LOGGER
 
+
+# Optional settings. This keeps clone.py compatible with info.py files
+# that don't define MULTIPLE_DB / DB_CHANGE_LIMIT.
+MULTIPLE_DB = getattr(info, "MULTIPLE_DB", False)
+DB_CHANGE_LIMIT = getattr(info, "DB_CHANGE_LIMIT", 450)
 
 _target_client = AsyncIOMotorClient(DATABASE_URI)
 _target_db = _target_client[DATABASE_NAME]
@@ -44,11 +51,16 @@ _clone_task = None
 _clone_cancel = False
 _clone_paused = False
 
+# user_id -> {"step": "url/database/collection", ...}
 _pending_add = {}
 
 BATCH_SIZE = 2000
 PROGRESS_EVERY = 5
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
 
 def _is_admin(user_id):
     return user_id in ADMINS
@@ -70,27 +82,43 @@ def _mask_mongo_url(uri):
         parsed = urlparse(uri)
         if parsed.username is None:
             return uri
+
         host = parsed.hostname or "host"
         port = f":{parsed.port}" if parsed.port else ""
-        return f"{parsed.scheme}://***:***@{host}{port}/..."
+        scheme = parsed.scheme
+
+        return f"{scheme}://***:***@{host}{port}/..."
+
     except Exception:
         return "mongodb://***:***@..."
 
 
 def _quota_error(exc):
     text = str(exc).lower()
-    return any(x in text for x in (
-        "space quota",
-        "quota exceeded",
-        "over your space quota",
-        "storage quota",
-        "exceeded the space",
-        "not enough space",
-    ))
+
+    return any(
+        x in text
+        for x in (
+            "space quota",
+            "quota exceeded",
+            "over your space quota",
+            "storage quota",
+            "exceeded the space",
+            "not enough space",
+        )
+    )
 
 
 def _clean_document(doc):
+    """
+    Convert a source Media document into the target Media schema.
+
+    The source bot normally stores the Telegram file id in _id because
+    ia_filterdb.Media maps file_id to _id.
+    """
+
     raw_id = doc.get("_id")
+
     if not isinstance(raw_id, str) or not raw_id.strip():
         raw_id = doc.get("file_id")
 
@@ -98,6 +126,7 @@ def _clean_document(doc):
         return None, "missing/invalid file_id"
 
     file_name = doc.get("file_name")
+
     if not isinstance(file_name, str) or not file_name.strip():
         return None, "missing file_name"
 
@@ -119,13 +148,20 @@ def _clean_document(doc):
 
 async def _get_source(source_id):
     oid = _oid(source_id)
+
     if not oid:
         return None
+
     return await _sources_col.find_one({"_id": oid})
 
 
 async def _list_sources():
-    return await _sources_col.find({}).sort("created_at", 1).to_list(length=100)
+    return await (
+        _sources_col
+        .find({})
+        .sort("created_at", 1)
+        .to_list(length=100)
+    )
 
 
 async def _source_client(source):
@@ -134,14 +170,16 @@ async def _source_client(source):
         serverSelectionTimeoutMS=10000,
         connectTimeoutMS=10000,
     )
+
     await client.admin.command("ping")
 
-    db_name = source.get("database")
-    if not db_name:
+    database = source.get("database")
+
+    if not database:
         client.close()
         raise ValueError("Source database name is missing.")
 
-    return client, client[db_name]
+    return client, client[database]
 
 
 async def _destination_collection():
@@ -149,6 +187,7 @@ async def _destination_collection():
         return Media.collection, "Primary"
 
     size = await check_db_size(Media.collection.database)
+
     limit = int(DB_CHANGE_LIMIT) * 1024 * 1024
 
     if size >= limit:
@@ -175,63 +214,127 @@ async def _bulk_clone_batch(target_collection, documents):
             operations,
             ordered=False,
         )
+
         inserted = int(result.upserted_count or 0)
         existing = max(0, len(documents) - inserted)
+
         return inserted, existing
 
     except BulkWriteError as exc:
         details = exc.details or {}
-        inserted = int(details.get("nUpserted", 0) or 0)
+
+        inserted = int(
+            details.get("nUpserted", 0) or 0
+        )
+
         errors = details.get("writeErrors", []) or []
 
-        if any(_quota_error(e.get("errmsg", "")) for e in errors):
+        if any(
+            _quota_error(error.get("errmsg", ""))
+            for error in errors
+        ):
             raise OperationFailure(str(exc))
 
-        existing = max(0, len(documents) - inserted)
+        existing = max(
+            0,
+            len(documents) - inserted,
+        )
+
         return inserted, existing
 
 
 async def _write_clone_batch(batch, stats):
     target, target_name = await _destination_collection()
+
     stats["target"] = target_name
 
     try:
-        return await _bulk_clone_batch(target, batch)
+        return await _bulk_clone_batch(
+            target,
+            batch,
+        )
 
     except OperationFailure as exc:
-        if not MULTIPLE_DB or target_name != "Primary" or not _quota_error(exc):
+        if (
+            not MULTIPLE_DB
+            or target_name != "Primary"
+            or not _quota_error(exc)
+        ):
             raise
 
         LOGGER.warning(
-            "Primary quota reached during clone; switching batch to Media2"
+            "Primary quota reached during clone; "
+            "switching batch to Media2"
         )
 
         stats["target"] = "Secondary"
-        return await _bulk_clone_batch(Media2.collection, batch)
+
+        return await _bulk_clone_batch(
+            Media2.collection,
+            batch,
+        )
 
 
 def _clone_control_keyboard():
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton(
-                "▶️ Resume" if _clone_paused else "⏸ Pause",
-                callback_data="clone:resume" if _clone_paused else "clone:pause",
-            ),
-            InlineKeyboardButton("⛔ Stop", callback_data="clone:cancel"),
-        ],
-        [InlineKeyboardButton("🔙 Back", callback_data="clone:menu")],
-    ])
+            [
+                InlineKeyboardButton(
+                    "▶️ Resume"
+                    if _clone_paused
+                    else "⏸ Pause",
+                    callback_data=(
+                        "clone:resume"
+                        if _clone_paused
+                        else "clone:pause"
+                    ),
+                ),
+                InlineKeyboardButton(
+                    "⛔ Stop",
+                    callback_data="clone:cancel",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔙 Back",
+                    callback_data="clone:menu",
+                )
+            ],
+        ]
+    )
 
 
-async def _update_progress(message, source_name, total, stats, started):
+async def _update_progress(
+    message,
+    source_name,
+    total,
+    stats,
+    started,
+):
     elapsed = time.time() - started
-    percent = (stats["read"] / total * 100) if total else 0
-    rate = stats["saved"] / elapsed if elapsed else 0
-    pause_text = "⏸ PAUSED" if _clone_paused else "▶️ RUNNING"
+
+    percent = (
+        stats["read"] / total * 100
+        if total
+        else 0
+    )
+
+    rate = (
+        stats["saved"] / elapsed
+        if elapsed
+        else 0
+    )
+
+    pause_text = (
+        "⏸ PAUSED"
+        if _clone_paused
+        else "▶️ RUNNING"
+    )
 
     await message.edit_text(
         f"🚀 <b>Cloning {pause_text}</b>\n\n"
         f"🗄 Source: <code>{source_name}</code>\n"
+        f"🗃 Database: <code>{stats['database']}</code>\n"
         f"📁 Collection: <code>{stats['collection']}</code>\n"
         f"📊 Progress: <code>{percent:.1f}%</code>\n"
         f"📥 Read: <code>{stats['read']:,}/{total:,}</code>\n"
@@ -247,23 +350,36 @@ async def _update_progress(message, source_name, total, stats, started):
 
 
 async def _clone_source(source, message):
-    global _clone_cancel, _clone_paused
+    global _clone_cancel
+    global _clone_paused
 
     _clone_cancel = False
     _clone_paused = False
+
     client = None
     started = time.time()
 
     stats = {
-        "read": 0, "saved": 0, "existing": 0, "invalid": 0,
-        "errors": 0, "batches": 0, "target": "Primary",
+        "read": 0,
+        "saved": 0,
+        "existing": 0,
+        "invalid": 0,
+        "errors": 0,
+        "batches": 0,
+        "target": "Primary",
+        "database": source["database"],
         "collection": source["collection"],
     }
 
     try:
         client, source_db = await _source_client(source)
-        source_collection = source_db[source["collection"]]
+
+        source_collection = source_db[
+            source["collection"]
+        ]
+
         total = await source_collection.estimated_document_count()
+
         source_name = _source_label(source)
 
         await message.edit_text(
@@ -276,12 +392,19 @@ async def _clone_source(source, message):
             reply_markup=_clone_control_keyboard(),
         )
 
-        cursor = source_collection.find({}, no_cursor_timeout=True).batch_size(BATCH_SIZE)
+        # IMPORTANT:
+        # Do NOT use no_cursor_timeout=True.
+        # Some MongoDB Atlas tiers reject no-timeout cursors.
+        cursor = source_collection.find(
+            {}
+        ).batch_size(BATCH_SIZE)
+
         batch = []
         last_update = time.time()
 
         try:
             async for raw in cursor:
+
                 if _clone_cancel:
                     break
 
@@ -292,6 +415,7 @@ async def _clone_source(source, message):
                     break
 
                 stats["read"] += 1
+
                 cleaned, error = _clean_document(raw)
 
                 if error:
@@ -302,37 +426,79 @@ async def _clone_source(source, message):
 
                 if len(batch) >= BATCH_SIZE:
                     try:
-                        inserted, existing = await _write_clone_batch(batch, stats)
+                        inserted, existing = (
+                            await _write_clone_batch(
+                                batch,
+                                stats,
+                            )
+                        )
+
                         stats["saved"] += inserted
                         stats["existing"] += existing
                         stats["batches"] += 1
+
                     except Exception:
                         stats["errors"] += len(batch)
-                        LOGGER.exception("Clone batch write failed")
+
+                        LOGGER.exception(
+                            "Clone batch write failed"
+                        )
 
                     batch.clear()
 
-                    if time.time() - last_update >= PROGRESS_EVERY:
+                    if (
+                        time.time() - last_update
+                        >= PROGRESS_EVERY
+                    ):
                         await _update_progress(
-                            message, source_name, total, stats, started
+                            message,
+                            source_name,
+                            total,
+                            stats,
+                            started,
                         )
+
                         last_update = time.time()
 
             if batch and not _clone_cancel:
                 try:
-                    inserted, existing = await _write_clone_batch(batch, stats)
+                    inserted, existing = (
+                        await _write_clone_batch(
+                            batch,
+                            stats,
+                        )
+                    )
+
                     stats["saved"] += inserted
                     stats["existing"] += existing
                     stats["batches"] += 1
+
                 except Exception:
                     stats["errors"] += len(batch)
-                    LOGGER.exception("Final clone batch write failed")
+
+                    LOGGER.exception(
+                        "Final clone batch write failed"
+                    )
+
         finally:
-            await cursor.close()
+            try:
+                await cursor.close()
+            except Exception:
+                pass
 
         elapsed = time.time() - started
-        title = "⛔ <b>Clone Stopped</b>" if _clone_cancel else "✅ <b>Clone Completed</b>"
-        rate = stats["saved"] / elapsed if elapsed else 0
+
+        title = (
+            "⛔ <b>Clone Stopped</b>"
+            if _clone_cancel
+            else "✅ <b>Clone Completed</b>"
+        )
+
+        rate = (
+            stats["saved"] / elapsed
+            if elapsed
+            else 0
+        )
 
         await message.edit_text(
             f"{title}\n\n"
@@ -347,25 +513,59 @@ async def _clone_source(source, message):
             f"🎯 Last target: <code>{stats['target']}</code>\n"
             f"⏱ Time: <code>{_duration(elapsed)}</code>\n"
             f"⚡ New files/sec: <code>{rate:,.1f}</code>",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Clone Again", callback_data=f"clone:run:{source['_id']}")],
-                [InlineKeyboardButton("📋 Sources", callback_data="clone:sources")],
-                [InlineKeyboardButton("🔙 Back", callback_data="clone:menu")],
-            ]),
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔄 Clone Again",
+                            callback_data=(
+                                f"clone:run:{source['_id']}"
+                            ),
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "📋 Sources",
+                            callback_data="clone:sources",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🔙 Back",
+                            callback_data="clone:menu",
+                        )
+                    ],
+                ]
+            ),
         )
 
     except Exception as exc:
         LOGGER.exception("Clone failed")
+
         try:
             await message.edit_text(
-                f"❌ <b>Clone Failed</b>\n\n<code>{str(exc)[:2500]}</code>",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("📋 Sources", callback_data="clone:sources")],
-                    [InlineKeyboardButton("🔙 Back", callback_data="clone:menu")],
-                ]),
+                f"❌ <b>Clone Failed</b>\n\n"
+                f"<code>{str(exc)[:2500]}</code>",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "📋 Sources",
+                                callback_data="clone:sources",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back",
+                                callback_data="clone:menu",
+                            )
+                        ],
+                    ]
+                ),
             )
         except Exception:
             pass
+
     finally:
         if client:
             client.close()
@@ -373,96 +573,186 @@ async def _clone_source(source, message):
 
 def _duration(seconds):
     seconds = int(seconds)
+
     if seconds < 60:
         return f"{seconds}s"
+
     if seconds < 3600:
         return f"{seconds // 60}m {seconds % 60}s"
-    return f"{seconds // 3600}h {(seconds % 3600) // 60}m"
+
+    return (
+        f"{seconds // 3600}h "
+        f"{(seconds % 3600) // 60}m"
+    )
 
 
 async def _menu_text():
     sources = await _list_sources()
+
     return (
         "⚡ <b>MongoDB Clone Manager</b>\n\n"
         f"🔗 Sources: <code>{len(sources)}</code>\n"
-        f"🚀 Status: <code>{'CLONING' if _clone_lock.locked() else 'IDLE'}</code>\n"
+        f"🚀 Status: <code>"
+        f"{'CLONING' if _clone_lock.locked() else 'IDLE'}"
+        f"</code>\n"
         f"🎯 Target: <code>{COLLECTION_NAME}</code>"
     )
 
 
 def _menu_keyboard():
-    return InlineKeyboardMarkup([
+    return InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("➕ Add Source", callback_data="clone:add"),
-            InlineKeyboardButton("📋 Sources", callback_data="clone:sources"),
-        ],
-        [
-            InlineKeyboardButton("📊 Target Stats", callback_data="clone:stats"),
-            InlineKeyboardButton("⛔ Stop Clone", callback_data="clone:cancel"),
-        ],
-        [InlineKeyboardButton("✖ Close", callback_data="clone:close")],
-    ])
+            [
+                InlineKeyboardButton(
+                    "➕ Add Source",
+                    callback_data="clone:add",
+                ),
+                InlineKeyboardButton(
+                    "📋 Sources",
+                    callback_data="clone:sources",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "📊 Target Stats",
+                    callback_data="clone:stats",
+                ),
+                InlineKeyboardButton(
+                    "⛔ Stop Clone",
+                    callback_data="clone:cancel",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "✖ Close",
+                    callback_data="clone:close",
+                )
+            ],
+        ]
+    )
 
 
-@Client.on_message(filters.command("clonemenu") & filters.user(ADMINS))
+@Client.on_message(
+    filters.command("clonemenu") & filters.user(ADMINS)
+)
 async def clone_menu(bot, message):
-    await message.reply_text(await _menu_text(), reply_markup=_menu_keyboard())
+    await message.reply_text(
+        await _menu_text(),
+        reply_markup=_menu_keyboard(),
+    )
 
 
-@Client.on_message(filters.private & filters.incoming & filters.text & filters.user(ADMINS))
+@Client.on_message(
+    filters.private
+    & filters.incoming
+    & filters.text
+    & filters.user(ADMINS)
+)
 async def clone_text_receiver(bot, message):
     user_id = message.from_user.id
+
     state = _pending_add.get(user_id)
 
-    if not state or message.text.startswith("/"):
+    if not state:
+        return
+
+    if message.text.startswith("/"):
         return
 
     text = message.text.strip()
 
+    # ---------------------------------------------------------
+    # URL
+    # ---------------------------------------------------------
+
     if state["step"] == "url":
-        if not (text.startswith("mongodb://") or text.startswith("mongodb+srv://")):
+
+        if not (
+            text.startswith("mongodb://")
+            or text.startswith("mongodb+srv://")
+        ):
             return await message.reply_text(
-                "❌ Invalid MongoDB URL.\n\n"
-                "It must start with <code>mongodb://</code> or <code>mongodb+srv://</code>"
+                "❌ <b>Invalid MongoDB URL</b>\n\n"
+                "It must start with:\n"
+                "<code>mongodb://</code>\n"
+                "or\n"
+                "<code>mongodb+srv://</code>"
             )
 
-        status = await message.reply_text("🔌 <b>Checking MongoDB URL...</b>")
+        status = await message.reply_text(
+            "🔌 <b>Checking MongoDB URL...</b>"
+        )
+
         client = None
 
         try:
             client = AsyncIOMotorClient(
-                text, serverSelectionTimeoutMS=10000, connectTimeoutMS=10000
+                text,
+                serverSelectionTimeoutMS=10000,
+                connectTimeoutMS=10000,
             )
+
             await client.admin.command("ping")
 
             state["url"] = text
             state["step"] = "database"
 
             await status.edit_text(
-                "🔗 <b>MongoDB URL Added ✅</b>\n\n"
+                "🔗 <b>MongoDB URL Added Successfully ✅</b>\n\n"
                 f"🔐 URL: <code>{_mask_mongo_url(text)}</code>\n\n"
                 "📂 <b>Now send the DATABASE NAME.</b>\n\n"
-                "Example: <code>sandy</code>",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 Back", callback_data="clone:add_back")],
-                    [InlineKeyboardButton("✖ Cancel", callback_data="clone:canceladd")],
-                ]),
+                "Example:\n"
+                "<code>sandy</code>",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back",
+                                callback_data="clone:add_back",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "✖ Cancel",
+                                callback_data="clone:canceladd",
+                            )
+                        ],
+                    ]
+                ),
             )
+
         except Exception as exc:
             await status.edit_text(
-                f"❌ <b>MongoDB connection failed</b>\n\n<code>{str(exc)[:2000]}</code>",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 Back", callback_data="clone:add")]
-                ]),
+                "❌ <b>MongoDB connection failed</b>\n\n"
+                f"<code>{str(exc)[:2000]}</code>",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back",
+                                callback_data="clone:add",
+                            )
+                        ]
+                    ]
+                ),
             )
+
         finally:
             if client:
                 client.close()
+
         return
 
+    # ---------------------------------------------------------
+    # DATABASE
+    # ---------------------------------------------------------
+
     if state["step"] == "database":
+
         if not text or text.startswith("$"):
-            return await message.reply_text("❌ Invalid database name.")
+            return await message.reply_text(
+                "❌ Invalid database name."
+            )
 
         state["database"] = text
         state["step"] = "collection"
@@ -471,44 +761,86 @@ async def clone_text_receiver(bot, message):
             "📂 <b>Database Added Successfully ✅</b>\n\n"
             f"🗃 Database: <code>{text}</code>\n\n"
             "📁 <b>Now send the COLLECTION NAME.</b>\n\n"
-            "Example: <code>sandy</code>",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Back", callback_data="clone:add_back")],
-                [InlineKeyboardButton("✖ Cancel", callback_data="clone:canceladd")],
-            ]),
+            "Example:\n"
+            "<code>sandy</code>",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔙 Back",
+                            callback_data="clone:add_back",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "✖ Cancel",
+                            callback_data="clone:canceladd",
+                        )
+                    ],
+                ]
+            ),
         )
+
         return
 
+    # ---------------------------------------------------------
+    # COLLECTION
+    # ---------------------------------------------------------
+
     if state["step"] == "collection":
+
         if not text or text.startswith("system."):
-            return await message.reply_text("❌ Invalid collection name.")
+            return await message.reply_text(
+                "❌ Invalid collection name."
+            )
 
         client = None
 
         try:
             client = AsyncIOMotorClient(
-                state["url"], serverSelectionTimeoutMS=10000, connectTimeoutMS=10000
+                state["url"],
+                serverSelectionTimeoutMS=10000,
+                connectTimeoutMS=10000,
             )
+
             await client.admin.command("ping")
 
             db = client[state["database"]]
+
             collections = await db.list_collection_names()
 
             if text not in collections:
                 return await message.reply_text(
                     "❌ <b>Collection not found.</b>\n\n"
-                    f"Database: <code>{state['database']}</code>\n"
-                    f"Collection: <code>{text}</code>",
-                    reply_markup=InlineKeyboardMarkup([
-                        [InlineKeyboardButton("🔙 Back", callback_data="clone:add_back")],
-                        [InlineKeyboardButton("✖ Cancel", callback_data="clone:canceladd")],
-                    ]),
+                    f"🗃 Database: "
+                    f"<code>{state['database']}</code>\n"
+                    f"📁 Collection: <code>{text}</code>",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "🔙 Back",
+                                    callback_data="clone:add_back",
+                                )
+                            ],
+                            [
+                                InlineKeyboardButton(
+                                    "✖ Cancel",
+                                    callback_data="clone:canceladd",
+                                )
+                            ],
+                        ]
+                    ),
                 )
 
-            count = await db[text].estimated_document_count()
+            count = await db[
+                text
+            ].estimated_document_count()
 
             doc = {
-                "name": f"{state['database']}/{text}",
+                "name": (
+                    f"{state['database']}/{text}"
+                ),
                 "uri": state["url"],
                 "database": state["database"],
                 "collection": text,
@@ -516,163 +848,403 @@ async def clone_text_receiver(bot, message):
             }
 
             result = await _sources_col.insert_one(doc)
+
             _pending_add.pop(user_id, None)
 
             await message.reply_text(
                 "✅ <b>SOURCE ADDED SUCCESSFULLY</b>\n\n"
-                f"🔗 MongoDB URL: <code>{_mask_mongo_url(state['url'])}</code>\n"
-                f"🗃 Database: <code>{state['database']}</code> ✅\n"
-                f"📁 Collection: <code>{text}</code> ✅\n"
+                f"🔗 MongoDB URL: "
+                f"<code>{_mask_mongo_url(state['url'])}</code>\n"
+                f"🗃 Database: "
+                f"<code>{state['database']}</code> ✅\n"
+                f"📁 Collection: "
+                f"<code>{text}</code> ✅\n"
                 f"📦 Documents: <code>{count:,}</code>\n\n"
-                f"🆔 Source ID: <code>{str(result.inserted_id)[-6:]}</code>",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🚀 Clone Now", callback_data=f"clone:run:{result.inserted_id}")],
-                    [InlineKeyboardButton("➕ Add Another", callback_data="clone:add")],
-                    [InlineKeyboardButton("📋 Sources", callback_data="clone:sources")],
-                    [InlineKeyboardButton("🔙 Back", callback_data="clone:menu")],
-                ]),
+                f"🆔 Source ID: "
+                f"<code>{str(result.inserted_id)[-6:]}</code>",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "🚀 Clone Now",
+                                callback_data=(
+                                    f"clone:run:{result.inserted_id}"
+                                ),
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "➕ Add Another",
+                                callback_data="clone:add",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "📋 Sources",
+                                callback_data="clone:sources",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back",
+                                callback_data="clone:menu",
+                            )
+                        ],
+                    ]
+                ),
             )
+
         except Exception as exc:
             await message.reply_text(
-                f"❌ <b>Could not verify collection</b>\n\n<code>{str(exc)[:2000]}</code>",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 Back", callback_data="clone:add_back")]
-                ]),
+                "❌ <b>Could not verify collection</b>\n\n"
+                f"<code>{str(exc)[:2000]}</code>",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back",
+                                callback_data="clone:add_back",
+                            )
+                        ]
+                    ]
+                ),
             )
+
         finally:
             if client:
                 client.close()
 
 
-@Client.on_callback_query(filters.regex(r"^clone:"))
+@Client.on_callback_query(
+    filters.regex(r"^clone:")
+)
 async def clone_callbacks(bot, query):
-    global _clone_task, _clone_cancel, _clone_paused
+    global _clone_task
+    global _clone_cancel
+    global _clone_paused
 
     if not _is_admin(query.from_user.id):
-        return await query.answer("Not allowed.", show_alert=True)
+        return await query.answer(
+            "Not allowed.",
+            show_alert=True,
+        )
 
     data = query.data.split(":")
-    action = data[1] if len(data) > 1 else ""
+    action = (
+        data[1]
+        if len(data) > 1
+        else ""
+    )
+
+    # ---------------------------------------------------------
+    # CLOSE
+    # ---------------------------------------------------------
 
     if action == "close":
-        _pending_add.pop(query.from_user.id, None)
+        _pending_add.pop(
+            query.from_user.id,
+            None,
+        )
+
         try:
             await query.message.delete()
         except Exception:
             pass
+
         return await query.answer()
 
+    # ---------------------------------------------------------
+    # CANCEL CLONE
+    # ---------------------------------------------------------
+
     if action == "cancel":
+        if not _clone_lock.locked():
+            return await query.answer(
+                "No clone is running.",
+                show_alert=True,
+            )
+
         _clone_cancel = True
         _clone_paused = False
-        if _clone_task and not _clone_task.done():
-            return await query.answer(
-                "Stop requested. Finishing current batch...", show_alert=True
-            )
-        return await query.answer("No clone is running.", show_alert=True)
+
+        return await query.answer(
+            "Stop requested. Finishing current batch...",
+            show_alert=True,
+        )
+
+    # ---------------------------------------------------------
+    # PAUSE
+    # ---------------------------------------------------------
 
     if action == "pause":
         if not _clone_lock.locked():
-            return await query.answer("No clone is running.", show_alert=True)
+            return await query.answer(
+                "No clone is running.",
+                show_alert=True,
+            )
+
         _clone_paused = True
-        return await query.answer("Clone paused.", show_alert=True)
+
+        return await query.answer(
+            "Clone paused.",
+            show_alert=True,
+        )
+
+    # ---------------------------------------------------------
+    # RESUME
+    # ---------------------------------------------------------
 
     if action == "resume":
         if not _clone_lock.locked():
-            return await query.answer("No clone is running.", show_alert=True)
-        _clone_paused = False
-        return await query.answer("Clone resumed.", show_alert=True)
+            return await query.answer(
+                "No clone is running.",
+                show_alert=True,
+            )
 
-    if action == "canceladd":
-        _pending_add.pop(query.from_user.id, None)
-        return await query.message.edit_text(
-            await _menu_text(), reply_markup=_menu_keyboard()
+        _clone_paused = False
+
+        return await query.answer(
+            "Clone resumed.",
+            show_alert=True,
         )
 
+    # ---------------------------------------------------------
+    # CANCEL ADD
+    # ---------------------------------------------------------
+
+    if action == "canceladd":
+        _pending_add.pop(
+            query.from_user.id,
+            None,
+        )
+
+        return await query.message.edit_text(
+            await _menu_text(),
+            reply_markup=_menu_keyboard(),
+        )
+
+    # ---------------------------------------------------------
+    # BACK DURING ADD
+    # ---------------------------------------------------------
+
     if action == "add_back":
-        state = _pending_add.get(query.from_user.id)
+
+        state = _pending_add.get(
+            query.from_user.id
+        )
+
         if not state:
             return await query.message.edit_text(
-                await _menu_text(), reply_markup=_menu_keyboard()
+                await _menu_text(),
+                reply_markup=_menu_keyboard(),
             )
 
         if state.get("step") == "collection":
+
             state["step"] = "database"
+
             return await query.message.edit_text(
                 "🔗 <b>MongoDB URL Added ✅</b>\n\n"
-                f"📂 Database: <code>{state.get('database', '')}</code>\n\n"
-                "Send the <b>DATABASE NAME</b> again.",
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔙 Back", callback_data="clone:add")],
-                    [InlineKeyboardButton("✖ Cancel", callback_data="clone:canceladd")],
-                ]),
+                f"🔐 URL: "
+                f"<code>{_mask_mongo_url(state.get('url', ''))}</code>\n\n"
+                "📂 <b>Send the DATABASE NAME.</b>",
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "🔙 Back",
+                                callback_data="clone:add",
+                            )
+                        ],
+                        [
+                            InlineKeyboardButton(
+                                "✖ Cancel",
+                                callback_data="clone:canceladd",
+                            )
+                        ],
+                    ]
+                ),
             )
 
-        _pending_add[query.from_user.id] = {"step": "url"}
+        _pending_add[
+            query.from_user.id
+        ] = {"step": "url"}
+
         return await query.message.edit_text(
-            "➕ <b>Add MongoDB Source</b>\n\nSend the <b>MongoDB URL</b>.",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Back", callback_data="clone:menu")],
-                [InlineKeyboardButton("✖ Cancel", callback_data="clone:canceladd")],
-            ]),
+            "➕ <b>Add MongoDB Source</b>\n\n"
+            "Send the <b>MongoDB URL</b>.",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔙 Back",
+                            callback_data="clone:menu",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "✖ Cancel",
+                            callback_data="clone:canceladd",
+                        )
+                    ],
+                ]
+            ),
         )
 
-    if action == "add":
-        if _clone_lock.locked():
-            return await query.answer("A clone is currently running.", show_alert=True)
+    # ---------------------------------------------------------
+    # ADD
+    # ---------------------------------------------------------
 
-        _pending_add[query.from_user.id] = {"step": "url"}
+    if action == "add":
+
+        if _clone_lock.locked():
+            return await query.answer(
+                "A clone is currently running.",
+                show_alert=True,
+            )
+
+        _pending_add[
+            query.from_user.id
+        ] = {"step": "url"}
 
         await query.message.edit_text(
             "➕ <b>Add MongoDB Source</b>\n\n"
             "Send the <b>source MongoDB URL</b>.\n\n"
-            "The URL does <b>NOT</b> need to contain the database name.\n\n"
+            "The URL does <b>NOT</b> need to contain "
+            "the database name.\n\n"
             "Example:\n"
-            "<code>mongodb+srv://user:password@cluster.mongodb.net/?retryWrites=true&w=majority</code>",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Back", callback_data="clone:menu")],
-                [InlineKeyboardButton("✖ Cancel", callback_data="clone:canceladd")],
-            ]),
+            "<code>mongodb+srv://user:password@"
+            "cluster.mongodb.net/</code>",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔙 Back",
+                            callback_data="clone:menu",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "✖ Cancel",
+                            callback_data="clone:canceladd",
+                        )
+                    ],
+                ]
+            ),
         )
+
         return await query.answer()
 
+    # ---------------------------------------------------------
+    # MENU
+    # ---------------------------------------------------------
+
     if action == "menu":
-        _pending_add.pop(query.from_user.id, None)
-        return await query.message.edit_text(
-            await _menu_text(), reply_markup=_menu_keyboard()
+
+        _pending_add.pop(
+            query.from_user.id,
+            None,
         )
 
+        return await query.message.edit_text(
+            await _menu_text(),
+            reply_markup=_menu_keyboard(),
+        )
+
+    # ---------------------------------------------------------
+    # SOURCES
+    # ---------------------------------------------------------
+
     if action == "sources":
+
         sources = await _list_sources()
+
         rows = []
 
         for source in sources:
+
             sid = str(source["_id"])
-            label = f"🗄 {_source_label(source)} • {source['collection']}"
-            rows.append([
-                InlineKeyboardButton(label[:60], callback_data=f"clone:source:{sid}")
-            ])
 
-        rows.append([InlineKeyboardButton("➕ Add Source", callback_data="clone:add")])
-        rows.append([InlineKeyboardButton("🔙 Back", callback_data="clone:menu")])
+            label = (
+                f"🗄 {_source_label(source)}"
+                f" • {source['collection']}"
+            )
 
-        text = "📋 <b>Saved MongoDB Sources</b>\n\n"
-        text += "No sources saved." if not sources else "Select a source:"
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        label[:60],
+                        callback_data=(
+                            f"clone:source:{sid}"
+                        ),
+                    )
+                ]
+            )
 
-        return await query.message.edit_text(
-            text, reply_markup=InlineKeyboardMarkup(rows)
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "➕ Add Source",
+                    callback_data="clone:add",
+                )
+            ]
         )
 
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    "🔙 Back",
+                    callback_data="clone:menu",
+                )
+            ]
+        )
+
+        text = (
+            "📋 <b>Saved MongoDB Sources</b>\n\n"
+        )
+
+        text += (
+            "No sources saved."
+            if not sources
+            else "Select a source:"
+        )
+
+        return await query.message.edit_text(
+            text,
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+
+    # ---------------------------------------------------------
+    # SOURCE DETAILS
+    # ---------------------------------------------------------
+
     if action == "source":
-        source = await _get_source(data[2] if len(data) > 2 else "")
+
+        source = await _get_source(
+            data[2]
+            if len(data) > 2
+            else ""
+        )
+
         if not source:
-            return await query.answer("Source not found.", show_alert=True)
+            return await query.answer(
+                "Source not found.",
+                show_alert=True,
+            )
 
         count = "?"
+
         try:
-            client, db = await _source_client(source)
-            count = f"{await db[source['collection']].estimated_document_count():,}"
+            client, db = (
+                await _source_client(source)
+            )
+
+            count = f"{await db[
+                source['collection']
+            ].estimated_document_count():,}"
+
             client.close()
+
         except Exception:
             pass
 
@@ -680,76 +1252,184 @@ async def clone_callbacks(bot, query):
 
         return await query.message.edit_text(
             f"🗄 <b>{_source_label(source)}</b>\n\n"
-            f"📁 Collection: <code>{source['collection']}</code>\n"
-            f"🗃 Database: <code>{source['database']}</code>\n"
-            f"📦 Documents: <code>{count}</code>\n"
-            f"🔗 URL: <code>{_mask_mongo_url(source['uri'])}</code>",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🚀 Start Clone", callback_data=f"clone:run:{sid}")],
-                [InlineKeyboardButton("🗑 Delete Source", callback_data=f"clone:delete:{sid}")],
-                [InlineKeyboardButton("🔙 Back", callback_data="clone:sources")],
-            ]),
+            f"📁 Collection: "
+            f"<code>{source['collection']}</code>\n"
+            f"🗃 Database: "
+            f"<code>{source['database']}</code>\n"
+            f"📦 Documents: "
+            f"<code>{count}</code>\n"
+            f"🔗 URL: "
+            f"<code>{_mask_mongo_url(source['uri'])}</code>",
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🚀 Start Clone",
+                            callback_data=(
+                                f"clone:run:{sid}"
+                            ),
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🗑 Delete Source",
+                            callback_data=(
+                                f"clone:delete:{sid}"
+                            ),
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🔙 Back",
+                            callback_data="clone:sources",
+                        )
+                    ],
+                ]
+            ),
         )
+
+    # ---------------------------------------------------------
+    # DELETE
+    # ---------------------------------------------------------
 
     if action == "delete":
-        source = await _get_source(data[2] if len(data) > 2 else "")
-        if not source:
-            return await query.answer("Source not found.", show_alert=True)
 
-        await _sources_col.delete_one({"_id": source["_id"]})
-        return await query.message.edit_text(
-            await _menu_text(), reply_markup=_menu_keyboard()
+        source = await _get_source(
+            data[2]
+            if len(data) > 2
+            else ""
         )
 
+        if not source:
+            return await query.answer(
+                "Source not found.",
+                show_alert=True,
+            )
+
+        await _sources_col.delete_one(
+            {"_id": source["_id"]}
+        )
+
+        return await query.message.edit_text(
+            await _menu_text(),
+            reply_markup=_menu_keyboard(),
+        )
+
+    # ---------------------------------------------------------
+    # STATS
+    # ---------------------------------------------------------
+
     if action == "stats":
+
         try:
-            size1 = await check_db_size(Media.collection.database)
+            size1 = await check_db_size(
+                Media.collection.database
+            )
+
             text = (
                 "📊 <b>Target Database</b>\n\n"
-                f"Primary data size: <code>{size1 / 1024 / 1024:.1f} MB</code>\n"
-                f"Limit: <code>{DB_CHANGE_LIMIT} MB</code>"
+                f"Primary data size: "
+                f"<code>{size1 / 1024 / 1024:.1f} MB</code>\n"
+                f"Limit: "
+                f"<code>{DB_CHANGE_LIMIT} MB</code>"
             )
 
             if MULTIPLE_DB:
+
                 try:
-                    stats2 = await Media2.collection.database.command("dbstats")
-                    size2 = stats2.get("dataSize", 0)
-                    text += f"\nSecondary data size: <code>{size2 / 1024 / 1024:.1f} MB</code>"
+                    stats2 = await (
+                        Media2.collection.database.command(
+                            "dbstats"
+                        )
+                    )
+
+                    size2 = stats2.get(
+                        "dataSize",
+                        0,
+                    )
+
+                    text += (
+                        f"\nSecondary data size: "
+                        f"<code>{size2 / 1024 / 1024:.1f} MB</code>"
+                    )
+
                 except Exception:
                     pass
 
             text += (
-                f"\n\nMedia: <code>{await Media.count_documents({}):,}</code>"
-                f"\nMedia2: <code>{await Media2.count_documents({}):,}</code>"
+                f"\n\nMedia: "
+                f"<code>{await Media.count_documents({}):,}</code>"
+                f"\nMedia2: "
+                f"<code>{await Media2.count_documents({}):,}</code>"
             )
+
         except Exception as exc:
-            text = f"❌ Stats error: <code>{str(exc)[:1000]}</code>"
+
+            text = (
+                "❌ Stats error: "
+                f"<code>{str(exc)[:1000]}</code>"
+            )
 
         return await query.message.edit_text(
             text,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔄 Refresh", callback_data="clone:stats")],
-                [InlineKeyboardButton("🔙 Back", callback_data="clone:menu")],
-            ]),
+            reply_markup=InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "🔄 Refresh",
+                            callback_data="clone:stats",
+                        )
+                    ],
+                    [
+                        InlineKeyboardButton(
+                            "🔙 Back",
+                            callback_data="clone:menu",
+                        )
+                    ],
+                ]
+            ),
         )
 
+    # ---------------------------------------------------------
+    # RUN
+    # ---------------------------------------------------------
+
     if action == "run":
+
         if len(data) < 3:
-            return await query.answer("Invalid source.", show_alert=True)
+            return await query.answer(
+                "Invalid source.",
+                show_alert=True,
+            )
 
         source = await _get_source(data[2])
+
         if not source:
-            return await query.answer("Source not found.", show_alert=True)
+            return await query.answer(
+                "Source not found.",
+                show_alert=True,
+            )
 
         if _clone_lock.locked():
-            return await query.answer("Another clone is already running.", show_alert=True)
+            return await query.answer(
+                "Another clone is already running.",
+                show_alert=True,
+            )
 
-        await query.answer("Clone started.")
+        await query.answer(
+            "Clone started."
+        )
 
         async with _clone_lock:
+
             _clone_task = asyncio.current_task()
+
             try:
-                await _clone_source(source, query.message)
+                await _clone_source(
+                    source,
+                    query.message,
+                )
+
             finally:
                 _clone_task = None
                 _clone_paused = False
