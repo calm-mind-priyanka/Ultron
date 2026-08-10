@@ -4,7 +4,7 @@ import re
 import base64
 from typing import Dict, List, Tuple, Optional
 from pyrogram.file_id import FileId
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import DuplicateKeyError, OperationFailure
 from umongo import Instance, Document, fields
 from motor.motor_asyncio import AsyncIOMotorClient
 from marshmallow.exceptions import ValidationError
@@ -56,7 +56,8 @@ _db_size_cache = {
     'time': 0,
     'size': 0
 }
-DB_SIZE_CACHE_DURATION = 60 
+DB_SIZE_CACHE_DURATION = 5
+_DB_WRITE_LOCK = asyncio.Lock()
 
 
 @lru_cache(maxsize=512)
@@ -112,34 +113,39 @@ async def check_db_size(silentdb):
         return 0
     
 async def save_file(media) -> Tuple[bool, int]:
+    """
+    Save a media document to the primary DB until the configured safety limit
+    is reached, then use the secondary DB. If the primary DB unexpectedly
+    rejects a write because its quota is exhausted, retry that file on DB2.
+    """
+    file_name = getattr(media, "file_name", "Unknown")
+    use_secondary = False
+
     try:
         file_id, file_ref = unpack_new_file_id(media.file_id)
         file_name = clean_filename(media.file_name)
-        use_secondary = False
+
+        # Always check both databases for duplicates. This prevents a file
+        # already stored in DB2 from being inserted into DB1 again.
+        exists_in_primary, exists_in_secondary = await asyncio.gather(
+            Media.find_one({'_id': file_id}),
+            Media2.find_one({'_id': file_id}) if MULTIPLE_DB else asyncio.sleep(0, result=None)
+        )
+        if exists_in_primary or exists_in_secondary:
+            LOGGER.info(f'{file_name} Is Already Saved In Database!')
+            return False, 0
+
         saveMedia = Media
 
         if MULTIPLE_DB:
             primary_db_size = await check_db_size(db)
-            db_change_limit_bytes = DB_CHANGE_LIMIT * 1024 * 1024
+            db_change_limit_bytes = int(DB_CHANGE_LIMIT * 1024 * 1024)
+
             if primary_db_size >= db_change_limit_bytes:
                 saveMedia = Media2
                 use_secondary = True
 
-        if use_secondary:
-            exists_in_primary, exists_in_secondary = await asyncio.gather(
-                Media.find_one({'_id': file_id}),
-                Media2.find_one({'_id': file_id})
-            )
-            if exists_in_primary or exists_in_secondary:
-                LOGGER.info(f'{file_name} Is Already Saved In Database!')
-                return False, 0
-        else:
-            exists = await Media.find_one({'_id': file_id})
-            if exists:
-                LOGGER.info(f'{file_name} Is Already Saved In Primary Database!')
-                return False, 0
-
-        file = saveMedia(
+        file_kwargs = dict(
             file_id=file_id,
             file_ref=file_ref,
             file_name=file_name,
@@ -148,19 +154,67 @@ async def save_file(media) -> Tuple[bool, int]:
             mime_type=media.mime_type,
             caption=media.caption.html if media.caption else None,
         )
-        await file.commit()
-        LOGGER.info(f'{file_name} Saved Successfully In {"Secondary" if use_secondary else "Primary"} Database')
+
+        try:
+            file = saveMedia(**file_kwargs)
+            await file.commit()
+        except DuplicateKeyError:
+            LOGGER.info(f'{file_name} Is Already Saved In {"Secondary" if use_secondary else "Primary"} Database')
+            return False, 0
+        except OperationFailure as e:
+            # Atlas/MongoDB quota errors can happen after the size check,
+            # especially while many files are being indexed concurrently.
+            quota_error = any(
+                text in str(e).lower()
+                for text in (
+                    "space quota",
+                    "quota exceeded",
+                    "over your space quota",
+                    "storage quota",
+                    "exceeded the space",
+                )
+            )
+
+            if not (MULTIPLE_DB and not use_secondary and quota_error):
+                raise
+
+            # Primary became full between the check and the write.
+            # Retry the same file on the secondary database.
+            LOGGER.warning(
+                f"Primary DB quota reached while saving {file_name}; "
+                f"retrying on secondary database."
+            )
+
+            # Re-check DB2 because another concurrent task may have saved it.
+            if await Media2.find_one({'_id': file_id}):
+                return False, 0
+
+            file = Media2(**file_kwargs)
+            await file.commit()
+            use_secondary = True
+
+        # Keep the cached primary size moving forward after successful writes.
+        # This reduces the chance that concurrent indexing tasks keep selecting
+        # the primary DB using an old cached value.
+        if MULTIPLE_DB and not use_secondary:
+            _db_size_cache['size'] += int(getattr(media, 'file_size', 0) or 0)
+
+        LOGGER.info(
+            f'{file_name} Saved Successfully In '
+            f'{"Secondary" if use_secondary else "Primary"} Database'
+        )
         return True, 1
+
     except ValidationError as e:
         LOGGER.error(f'Validation Error While Saving File: {e}')
         return False, 2
     except DuplicateKeyError:
-        LOGGER.info(f'{file_name} Is Already Saved In {"Secondary" if use_secondary else "Primary"} Database')
+        LOGGER.info(f'{file_name} Is Already Saved In Database')
         return False, 0
     except Exception as e:
         LOGGER.error(f"Unexpected error in save_file: {e}")
         return False, 3
-            
+
 
 async def get_search_results(chat_id, query, file_type=None, max_results=10, offset=0, filter=None) -> Tuple[List, int, int]:
     if chat_id is not None:
