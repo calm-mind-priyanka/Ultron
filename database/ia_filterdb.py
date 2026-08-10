@@ -1,861 +1,430 @@
-import asyncio
-from struct import pack
-import re
-import base64
-from typing import Dict, List, Tuple, Optional
-from pyrogram.file_id import FileId
-from pymongo.errors import DuplicateKeyError, OperationFailure
-from umongo import Instance, Document, fields
-from motor.motor_asyncio import AsyncIOMotorClient
-from marshmallow.exceptions import ValidationError
-from info import *
-from utils import get_settings, save_group_settings, clean_filename
-from collections import defaultdict
-from datetime import datetime, timedelta
+import motor.motor_asyncio
+from info import *  
+from datetime import timedelta
+import time, datetime, pytz
+from pymongo.errors import DuplicateKeyError
+from pymongo import MongoClient
 from logging_helper import LOGGER
-import time
-from functools import lru_cache
 
-client = AsyncIOMotorClient(DATABASE_URI)
-db = client[DATABASE_NAME]
-instance = Instance.from_db(db)
-
-client2 = AsyncIOMotorClient(DATABASE_URI2)
-db2 = client2[DATABASE_NAME]
-instance2 = Instance.from_db(db2)
-
-
-@instance.register
-class Media(Document):
-    file_id = fields.StrField(attribute='_id')
-    file_ref = fields.StrField(allow_none=True)
-    file_name = fields.StrField(required=True)
-    file_size = fields.IntField(required=True)
-    file_type = fields.StrField(allow_none=True)
-    mime_type = fields.StrField(allow_none=True)
-    caption = fields.StrField(allow_none=True)
-
-    class Meta:
-        indexes = ('$file_name',)
-        collection_name = COLLECTION_NAME
-
-
-@instance2.register
-class Media2(Document):
-    file_id = fields.StrField(attribute='_id')
-    file_ref = fields.StrField(allow_none=True)
-    file_name = fields.StrField(required=True)
-    file_size = fields.IntField(required=True)
-    file_type = fields.StrField(allow_none=True)
-    mime_type = fields.StrField(allow_none=True)
-    caption = fields.StrField(allow_none=True)
-
-    class Meta:
-        indexes = ('$file_name',)
-        collection_name = COLLECTION_NAME
-
-
-_db_size_cache = {
-    'time': 0,
-    'size': 0
-}
-
-DB_SIZE_CACHE_DURATION = 5
-_DB_WRITE_LOCK = asyncio.Lock()
-
-
-@lru_cache(maxsize=512)
-def get_regex_pattern(query):
-    query = query.strip()
-
-    if not query:
-        raw_pattern = '.'
-
-    elif ' ' not in query:
-        raw_pattern = (
-            r"(\b|[\.\+\-_])"
-            + re.escape(query)
-            + r"(\b|[\.\+\-_])"
-        )
-
-    else:
-        parts = query.split(' ')
-        new_parts = []
-
-        for part in parts:
-            new_parts.append(
-                r"(\b|[\.\+\-_])"
-                + re.escape(part)
-                + r"(\b|[\.\+\-_])"
-            )
-
-        raw_pattern = r".*[\s\.\+\-_()\[\]]".join(new_parts)
-
-    try:
-        return re.compile(raw_pattern, flags=re.IGNORECASE)
-
-    except Exception:
-        return None
-
-
-async def check_db_size(silentdb):
-    try:
-        global _db_size_cache
-
-        current_time = time.time()
-        is_primary = False
-
-        # Identify if it's the primary DB
-        if hasattr(silentdb, 'name') and silentdb.name == db.name:
-            is_primary = True
-
-        elif hasattr(silentdb, 'db') and silentdb.db.name == db.name:
-            is_primary = True
-
-        if is_primary and (
-            current_time - _db_size_cache['time']
-            < DB_SIZE_CACHE_DURATION
-        ):
-            return _db_size_cache['size']
-
-        stats = None
-
-        if hasattr(silentdb, 'command'):
-            stats = await silentdb.command("dbstats")
-
-        elif (
-            hasattr(silentdb, 'db')
-            and hasattr(silentdb.db, 'command')
-        ):
-            stats = await silentdb.db.command("dbstats")
-
-        elif (
-            hasattr(silentdb, 'collection')
-            and hasattr(silentdb.collection.database, 'command')
-        ):
-            stats = await silentdb.collection.database.command("dbstats")
-
-        size = stats.get('dataSize', 0) if stats else 0
-
-        if is_primary:
-            _db_size_cache['time'] = current_time
-            _db_size_cache['size'] = size
-
-        return size
-
-    except Exception as e:
-        LOGGER.error(f"Error checking DB size: {e}")
-        return 0
-
-
-async def save_file(media) -> Tuple[bool, int]:
-    """
-    Save a media document to the primary DB until the configured
-    safety limit is reached, then use the secondary DB.
-
-    If the primary DB unexpectedly rejects a write because its quota
-    is exhausted, retry that file on DB2.
-    """
-
-    file_name = getattr(media, "file_name", "Unknown")
-    use_secondary = False
-
-    try:
-        file_id, file_ref = unpack_new_file_id(media.file_id)
-        file_name = clean_filename(media.file_name)
-
-        # Always check both databases for duplicates.
-        exists_in_primary, exists_in_secondary = await asyncio.gather(
-            Media.find_one({'_id': file_id}),
-            Media2.find_one({'_id': file_id})
-            if MULTIPLE_DB
-            else asyncio.sleep(0, result=None)
-        )
-
-        if exists_in_primary or exists_in_secondary:
-            LOGGER.info(
-                f'{file_name} Is Already Saved In Database!'
-            )
-            return False, 0
-
-        saveMedia = Media
-
-        if MULTIPLE_DB:
-            primary_db_size = await check_db_size(db)
-            db_change_limit_bytes = int(
-                DB_CHANGE_LIMIT * 1024 * 1024
-            )
-
-            if primary_db_size >= db_change_limit_bytes:
-                saveMedia = Media2
-                use_secondary = True
-
-        file_kwargs = dict(
-            file_id=file_id,
-            file_ref=file_ref,
-            file_name=file_name,
-            file_size=media.file_size,
-            file_type=media.file_type,
-            mime_type=media.mime_type,
-            caption=media.caption.html
-            if media.caption
-            else None,
-        )
-
-        try:
-            file = saveMedia(**file_kwargs)
-            await file.commit()
-
-        except DuplicateKeyError:
-            LOGGER.info(
-                f'{file_name} Is Already Saved In '
-                f'{"Secondary" if use_secondary else "Primary"} Database'
-            )
-            return False, 0
-
-        except OperationFailure as e:
-            # Atlas/MongoDB quota errors can happen after the
-            # size check, especially while many files are indexed
-            # concurrently.
-
-            quota_error = any(
-                text in str(e).lower()
-                for text in (
-                    "space quota",
-                    "quota exceeded",
-                    "over your space quota",
-                    "storage quota",
-                    "exceeded the space",
-                )
-            )
-
-            if not (
-                MULTIPLE_DB
-                and not use_secondary
-                and quota_error
-            ):
-                raise
-
-            LOGGER.warning(
-                f"Primary DB quota reached while saving "
-                f"{file_name}; retrying on secondary database."
-            )
-
-            # Re-check DB2 because another concurrent task
-            # may have saved it.
-            if await Media2.find_one({'_id': file_id}):
-                return False, 0
-
-            file = Media2(**file_kwargs)
-            await file.commit()
-
-            use_secondary = True
-
-        # Keep cached primary size moving forward after
-        # successful writes.
-        if MULTIPLE_DB and not use_secondary:
-            _db_size_cache['size'] += int(
-                getattr(media, 'file_size', 0) or 0
-            )
-
-        LOGGER.info(
-            f'{file_name} Saved Successfully In '
-            f'{"Secondary" if use_secondary else "Primary"} Database'
-        )
-
-        return True, 1
-
-    except ValidationError as e:
-        LOGGER.error(
-            f'Validation Error While Saving File: {e}'
-        )
-        return False, 2
-
-    except DuplicateKeyError:
-        LOGGER.info(
-            f'{file_name} Is Already Saved In Database'
-        )
-        return False, 0
-
-    except Exception as e:
-        LOGGER.error(
-            f"Unexpected error in save_file: {e}"
-        )
-        return False, 3
-
-
-async def get_search_results(
-    chat_id,
-    query,
-    file_type=None,
-    max_results=10,
-    offset=0,
-    filter=None
-) -> Tuple[List, int, int]:
-
-    if chat_id is not None:
-        settings = await get_settings(int(chat_id))
-
-        try:
-            user_max_btn = settings.get('max_btn')
-
-            if user_max_btn:
-                max_results = 10
-            else:
-                max_results = int(MAX_B_TN)
-
-        except (KeyError, ValueError):
-            await save_group_settings(
-                int(chat_id),
-                'max_btn',
-                False
-            )
-            max_results = int(MAX_B_TN)
-
-    regex = get_regex_pattern(query)
-
-    if not regex:
-        return [], 0, 0
-
-    if not isinstance(filter, dict):
-
-        if USE_CAPTION_FILTER:
-            filter = {
-                '$or': [
-                    {'file_name': regex},
-                    {'caption': regex}
-                ]
-            }
-
-        else:
-            filter = {
-                'file_name': regex
-            }
-
-    if file_type:
-        filter['file_type'] = file_type
-
-    if max_results % 2 != 0:
-        max_results += 1
-
-    # Use field projection to reduce data transfer.
-    projection = {
-        'file_name': 1,
-        'file_size': 1,
-        'file_id': 1,
-        'file_type': 1,
-        'caption': 1,
-        '_id': 1
-    }
-
-    cursor1 = (
-        Media.find(filter, projection)
-        .sort('$natural', -1)
-        .skip(offset)
-        .limit(max_results)
-    )
-
-    files = await cursor1.to_list(
-        length=max_results
-    )
-
-    total_results = 0
-
-    if not MULTIPLE_DB:
-
-        if offset == 0 and len(files) < max_results:
-            total_results = len(files)
-
-        else:
-            total_results = await Media.count_documents(
-                filter
-            )
-
-    else:
-        # Count both databases concurrently.
-        count_db1_task = Media.count_documents(filter)
-        count_db2_task = Media2.count_documents(filter)
-
-        count_db1, count_db2 = await asyncio.gather(
-            count_db1_task,
-            count_db2_task
-        )
-
-        total_results = count_db1 + count_db2
-
-        if len(files) < max_results:
-
-            remaining_needed = max_results - len(files)
-
-            if len(files) > 0:
-
-                cursor2 = (
-                    Media2.find(filter, projection)
-                    .sort('$natural', -1)
-                    .limit(remaining_needed)
-                )
-
-                files2 = await cursor2.to_list(
-                    length=remaining_needed
-                )
-
-                files.extend(files2)
-
-            else:
-
-                if offset >= count_db1:
-
-                    offset_db2 = offset - count_db1
-
-                    cursor2 = (
-                        Media2.find(filter, projection)
-                        .sort('$natural', -1)
-                        .skip(offset_db2)
-                        .limit(max_results)
-                    )
-
-                    files = await cursor2.to_list(
-                        length=max_results
-                    )
-
-    next_offset = offset + len(files)
-
-    if next_offset >= total_results or len(files) == 0:
-        next_offset = 0
-
-    return files, next_offset, total_results
-
-
-async def get_bad_files(query, file_type=None):
-
-    regex = get_regex_pattern(query)
-
-    if not regex:
-        return [], 0
-
-    if USE_CAPTION_FILTER:
-        filter = {
-            '$or': [
-                {'file_name': regex},
-                {'caption': regex}
-            ]
-        }
-
-    else:
-        filter = {
-            'file_name': regex
-        }
-
-    if file_type:
-        filter['file_type'] = file_type
-
-    if MULTIPLE_DB:
-
-        async def fetch_all(media_class):
-
-            cursor = (
-                media_class.find(filter)
-                .sort('$natural', -1)
-            )
-
-            count = await media_class.count_documents(
-                filter
-            )
-
-            return await cursor.to_list(
-                length=count
-            )
-
-        files1_task = fetch_all(Media)
-        files2_task = fetch_all(Media2)
-
-        files1, files2 = await asyncio.gather(
-            files1_task,
-            files2_task
-        )
-
-        files = files1 + files2
-
-    else:
-
-        cursor = (
-            Media.find(filter)
-            .sort('$natural', -1)
-        )
-
-        count = await Media.count_documents(
-            filter
-        )
-
-        files = await cursor.to_list(
-            length=count
-        )
-
-    return files, len(files)
-
-
-async def get_file_details(query):
-    """
-    Get a stored file using its canonical file ID.
-
-    IMPORTANT:
-    Media.file_id is mapped to MongoDB's `_id` field:
-
-        file_id = fields.StrField(attribute='_id')
-
-    Therefore the MongoDB query MUST use `_id`, not `file_id`.
-    """
-
-    filter = {
-        '_id': query
-    }
-
-    if MULTIPLE_DB:
-
-        result1, result2 = await asyncio.gather(
-            Media.find(filter).to_list(length=1),
-            Media2.find(filter).to_list(length=1)
-        )
-
-        return result1 if result1 else result2
-
-    else:
-
-        cursor = Media.find(filter)
-
-        return await cursor.to_list(
-            length=1
-        )
-
-
-def encode_file_id(s: bytes) -> str:
-    r = b""
-    n = 0
-
-    for i in s + bytes([22]) + bytes([4]):
-
-        if i == 0:
-            n += 1
-
-        else:
-
-            if n:
-                r += b"\x00" + bytes([n])
-                n = 0
-
-            r += bytes([i])
-
-    return base64.urlsafe_b64encode(
-        r
-    ).decode().rstrip("=")
-
-
-def encode_file_ref(file_ref: bytes) -> str:
-    return base64.urlsafe_b64encode(
-        file_ref
-    ).decode().rstrip("=")
-
-
-def unpack_new_file_id(new_file_id):
-
-    decoded = FileId.decode(
-        new_file_id
-    )
-
-    file_id = encode_file_id(
-        pack(
-            "<iiqq",
-            int(decoded.file_type),
-            decoded.dc_id,
-            decoded.media_id,
-            decoded.access_hash
-        )
-    )
-
-    file_ref = encode_file_ref(
-        decoded.file_reference
-    )
-
-    return file_id, file_ref
-
-
-_TITLE_PROJECTION = {
-    'file_name': 1,
-    'caption': 1,
-    '_id': 0
-}
-
-
-async def siletxbotz_fetch_media(limit: int) -> List[dict]:
-
-    try:
-
-        if MULTIPLE_DB:
-
-            half = limit // 2
-            remainder = limit - half
-
-            results = await asyncio.gather(
-
-                Media.find(
-                    {},
-                    _TITLE_PROJECTION
-                )
-                .sort("$natural", -1)
-                .limit(half)
-                .to_list(length=half),
-
-                Media2.find(
-                    {},
-                    _TITLE_PROJECTION
-                )
-                .sort("$natural", -1)
-                .limit(remainder)
-                .to_list(length=remainder)
-            )
-
-            return results[0] + results[1]
-
-        files = await (
-            Media.find(
-                {},
-                _TITLE_PROJECTION
-            )
-            .sort("$natural", -1)
-            .limit(limit)
-            .to_list(length=limit)
-        )
-
-        return files
-
-    except Exception as e:
-
-        LOGGER.error(
-            f"Error in siletxbotz_fetch_media: {e}"
-        )
-
-        return []
-
-
-async def silentxbotz_clean_title(
-    filename: str,
-    is_series: bool = False
-) -> str:
-
-    try:
-
-        if not filename:
-            return ""
-
-        filename = clean_filename(
-            filename
-        )
-
-        year_match = re.search(
-            r"^(.*?)(\b\d{4}\b)",
-            filename,
-            re.IGNORECASE
-        )
-
-        if year_match:
-
-            title = year_match.group(1).strip()
-
-            return title.title()
-
-        if is_series:
-
-            season_match = re.search(
-                r"(.*?)(?:S(\d{1,2})|Season\s*(\d+))",
-                filename,
-                re.IGNORECASE
-            )
-
-            if season_match:
-
-                title = season_match.group(1).strip()
-
-                season_num = (
-                    season_match.group(2)
-                    or season_match.group(3)
-                )
-
-                return (
-                    f"{title.title()} "
-                    f"S{int(season_num):02}"
-                )
-
-        return filename.strip().title()
-
-    except Exception as e:
-
-        LOGGER.error(
-            f"Error in silentxbotz_clean_title: {e}"
-        )
-
-        return filename
-
-
-async def siletxbotz_get_movies(
-    limit: int = 20
-) -> List[str]:
-
-    try:
-
-        candidates = await siletxbotz_fetch_media(
-            limit * 2
-        )
-
-        results = set()
-
-        pattern = (
-            r"(?:s\d{1,2}|season\s*\d+)"
-            r"(?:\s*e\d{1,2}|episode\s*\d+)?\b"
-        )
-
-        for file in candidates:
-
-            file_name = (
-                file.get("file_name")
-                if isinstance(file, dict)
-                else getattr(file, "file_name", "")
-            )
-
-            caption = (
-                file.get("caption", "")
-                if isinstance(file, dict)
-                else getattr(file, "caption", "")
-            )
-
-            if not file_name:
-                continue
-
-            if (
-                re.search(
-                    pattern,
-                    file_name,
-                    re.IGNORECASE
-                )
-                or (
-                    caption
-                    and re.search(
-                        pattern,
-                        caption,
-                        re.IGNORECASE
-                    )
-                )
-            ):
-                continue
-
-            title = await silentxbotz_clean_title(
-                file_name,
-                is_series=False
-            )
-
-            if title:
-                results.add(title)
-
-            if len(results) >= limit:
-                break
-
-        return sorted(
-            list(results)
-        )[:limit]
-
-    except Exception as e:
-
-        LOGGER.error(
-            f"Error in siletxbotz_get_movies: {e}"
-        )
-
-        return []
-
-
-async def siletxbotz_get_series(
-    limit: int = 30
-) -> Dict[str, List[int]]:
-
-    try:
-
-        candidates = await siletxbotz_fetch_media(
-            limit * 3
-        )
-
-        grouped = defaultdict(list)
-
-        pattern = (
-            r"(.*?)(?:S(\d{1,2})|Season\s*(\d+))"
-        )
-
-        for file in candidates:
-
-            file_name = (
-                file.get("file_name")
-                if isinstance(file, dict)
-                else getattr(file, "file_name", "")
-            )
-
-            caption = (
-                file.get("caption", "")
-                if isinstance(file, dict)
-                else getattr(file, "caption", "")
-            )
-
-            if not file_name:
-                continue
-
-            match = re.search(
-                pattern,
-                file_name,
-                re.IGNORECASE
-            )
-
-            if not match and caption:
-                match = re.search(
-                    pattern,
-                    caption,
-                    re.IGNORECASE
-                )
-
-            if match:
-
-                title_part = match.group(1)
-
-                season_num = (
-                    match.group(2)
-                    or match.group(3)
-                )
-
-                title = await silentxbotz_clean_title(
-                    title_part,
-                    is_series=False
-                )
-
-                try:
-
-                    s_num = int(
-                        season_num
-                    )
-
-                    if s_num not in grouped[title]:
-                        grouped[title].append(s_num)
-
-                except ValueError:
-                    continue
-
-        result = {
-            t: sorted(s)
-            for t, s in grouped.items()
-        }
-
+class Database:    
+    def __init__(self, uri, database_name):
+        self._client = motor.motor_asyncio.AsyncIOMotorClient(uri)
+        self.db = self._client[database_name]
+        self.col = self.db.users
+        self.grp = self.db.groups
+        self.users = self.db.uersz
+        self.botcol = self.db.bot_settings
+        self.misc = self.db.misc
+        self.verify_id = self.db.verify_id 
+        self.codes = self.db.codes
+        self.connection = self.db.connections
+
+    async def find_join_req(self, id, chnl):
+        chnl = str(chnl)
+        return bool(await self.db.request[chnl].find_one({'id': id})) 
+     
+    async def add_join_req(self, id, chnl):
+        chnl = str(chnl)
+        await self.db.request[chnl].insert_one({'id': id})
+
+    async def del_join_req(self):
+        if AUTH_REQ_CHANNEL:
+            for c in AUTH_REQ_CHANNEL:
+                c = str(c)
+                result = await self.db.request[c].delete_many({})
+                LOGGER.info(f"Deleted {result.deleted_count} requests from {c}")
+
+    def new_user(self, id, name):
         return dict(
-            list(result.items())[:limit]
+            id = id,
+            name = name,
+            ban_status=dict(
+                is_banned=False,
+                ban_reason="",
+            ),
         )
 
-    except Exception as e:
+    def new_group(self, id, title):
+        return dict(
+            id = id,
+            title = title,
+            chat_status=dict(
+                is_disabled=False,
+                reason="",
+            ),
+        )
+    
+    async def add_user(self, id, name):
+        user = self.new_user(id, name)
+        await self.col.insert_one(user)
+    
+    async def is_user_exist(self, id):
+        user = await self.col.find_one({'id':int(id)})
+        return bool(user)
+    
+    async def total_users_count(self):
+        count = await self.col.count_documents({})
+        return count
+    
+    async def remove_ban(self, id):
+        ban_status = dict(
+            is_banned=False,
+            ban_reason=''
+        )
+        await self.col.update_one({'id': id}, {'$set': {'ban_status': ban_status}})
+    
+    async def ban_user(self, user_id, ban_reason="No Reason"):
+        ban_status = dict(
+            is_banned=True,
+            ban_reason=ban_reason
+        )
+        await self.col.update_one({'id': user_id}, {'$set': {'ban_status': ban_status}})
 
-        LOGGER.error(
-            f"Error in siletxbotz_get_series: {e}"
+    async def get_ban_status(self, id):
+        default = dict(
+            is_banned=False,
+            ban_reason=''
+        )
+        user = await self.col.find_one({'id':int(id)})
+        if not user:
+            return default
+        return user.get('ban_status', default)
+
+    async def get_all_users(self):
+        return self.col.find({})
+    
+    async def delete_user(self, user_id):
+        await self.col.delete_many({'id': int(user_id)})
+        
+    async def delete_chat(self, id):
+        await self.grp.delete_many({'id': int(id)})    
+
+    async def get_banned(self):
+        users = self.col.find({'ban_status.is_banned': True})
+        chats = self.grp.find({'chat_status.is_disabled': True})
+        b_chats = [chat['id'] async for chat in chats]
+        b_users = [user['id'] async for user in users]
+        return b_users, b_chats
+    
+    async def add_chat(self, chat, title):
+        chat_data = self.new_group(chat, title)
+        await self.grp.update_one({'id': int(chat)}, {'$set': chat_data}, upsert=True)
+    
+    async def get_chat(self, chat):
+        chat = await self.grp.find_one({'id':int(chat)})
+        return False if not chat else chat.get('chat_status')
+    
+    async def re_enable_chat(self, id):
+        chat_status=dict(
+            is_disabled=False,
+            reason="",
+            )
+        await self.grp.update_one({'id': int(id)}, {'$set': {'chat_status': chat_status}})
+        
+    async def update_settings(self, id, settings):
+        await self.grp.update_one({'id': int(id)}, {'$set': {'settings': settings}}, upsert=True)
+            
+    async def get_settings(self, id):
+        default = {
+            'button': BUTTON_MODE,
+            'botpm': P_TTI_SHOW_OFF,
+            'file_secure': PROTECT_CONTENT,
+            'imdb': IMDB,
+            'spell_check': SPELL_CHECK_REPLY,
+            'welcome': MELCOW_NEW_USERS,
+            'auto_delete': AUTO_DELETE,
+            'auto_del_time': AUTO_DELETE_TIME,
+            'auto_ffilter': AUTO_FFILTER,
+            'max_btn': MAX_BTN,
+            'template': IMDB_TEMPLATE,
+            'log': LOG_VR_CHANNEL,
+            'tutorial': TUTORIAL,
+            'tutorial_2': TUTORIAL_2,
+            'tutorial_3': TUTORIAL_3,
+            'shortner': SHORTENER_WEBSITE,
+            'api': SHORTENER_API,
+            'shortner_two': SHORTENER_WEBSITE2,
+            'api_two': SHORTENER_API2,
+            'shortner_three': SHORTENER_WEBSITE3,
+            'api_three': SHORTENER_API3,
+            'is_verify': IS_VERIFY,
+            'verify_time': TWO_VERIFY_GAP,
+            'third_verify_time': THREE_VERIFY_GAP,
+            'caption': CUSTOM_FILE_CAPTION,
+            'fsub_id': AUTH_CHANNEL
+        }
+        chat = await self.grp.find_one({'id':int(id)})
+        if chat and 'settings' in chat:
+            return {**default, **chat['settings']}
+        else:
+            return default.copy()
+
+    async def delete_setting(self, id, key):
+        await self.grp.update_one({'id': int(id)}, {'$unset': {f'settings.{key}': ""}})
+
+    async def silentx_reset_settings(self):
+        try:
+            result = await self.grp.update_many(
+                {'settings': {'$exists': True}},
+                {'$unset': {'settings': ''}}
+            )
+            modified_count = result.modified_count
+            return modified_count
+        except Exception as e:
+            LOGGER.error(f"Error deleting settings for all groups: {str(e)}")
+            raise
+            
+    async def disable_chat(self, chat, reason="No Reason"):
+        chat_status=dict(
+            is_disabled=True,
+            reason=reason,
+            )
+        await self.grp.update_one({'id': int(chat)}, {'$set': {'chat_status': chat_status}})
+
+    async def total_chat_count(self):
+        count = await self.grp.count_documents({})
+        return count
+    
+    async def get_all_chats(self):
+        return self.grp.find({})
+
+    async def get_db_size(self):
+        return (await self.db.command("dbstats"))['dataSize']
+
+    async def get_user(self, user_id):
+        user_data = await self.users.find_one({"id": user_id})
+        return user_data
+    async def update_user(self, user_data):
+        await self.users.update_one({"id": user_data["id"]}, {"$set": user_data}, upsert=True)
+
+    async def get_notcopy_user(self, user_id):
+        user_id = int(user_id)
+        user = await self.misc.find_one({"user_id": user_id})
+        ist_timezone = pytz.timezone('Asia/Kolkata')
+        if not user:
+            res = {
+                "user_id": user_id,
+                "last_verified": datetime.datetime(2020, 5, 17, 0, 0, 0, tzinfo=ist_timezone),
+                "second_time_verified": datetime.datetime(2019, 5, 17, 0, 0, 0, tzinfo=ist_timezone),
+            }
+            user = await self.misc.insert_one(res)
+        return user
+
+    async def update_notcopy_user(self, user_id, value:dict):
+        user_id = int(user_id)
+        myquery = {"user_id": user_id}
+        newvalues = {"$set": value}
+        return await self.misc.update_one(myquery, newvalues)
+
+    async def is_user_verified(self, user_id):
+        user = await self.get_notcopy_user(user_id)
+        try:
+            pastDate = user["last_verified"]
+        except Exception:
+            user = await self.get_notcopy_user(user_id)
+            pastDate = user["last_verified"]
+        ist_timezone = pytz.timezone('Asia/Kolkata')
+        pastDate = pastDate.astimezone(ist_timezone)
+        current_time = datetime.datetime.now(tz=ist_timezone)
+        seconds_since_midnight = (current_time - datetime.datetime(current_time.year, current_time.month, current_time.day, 0, 0, 0, tzinfo=ist_timezone)).total_seconds()
+        time_diff = current_time - pastDate
+        total_seconds = time_diff.total_seconds()
+        return total_seconds <= seconds_since_midnight
+
+    async def user_verified(self, user_id):
+        user = await self.get_notcopy_user(user_id)
+        try:
+            pastDate = user["second_time_verified"]
+        except Exception:
+            user = await self.get_notcopy_user(user_id)
+            pastDate = user["second_time_verified"]
+        ist_timezone = pytz.timezone('Asia/Kolkata')
+        pastDate = pastDate.astimezone(ist_timezone)
+        current_time = datetime.datetime.now(tz=ist_timezone)
+        seconds_since_midnight = (current_time - datetime.datetime(current_time.year, current_time.month, current_time.day, 0, 0, 0, tzinfo=ist_timezone)).total_seconds()
+        time_diff = current_time - pastDate
+        total_seconds = time_diff.total_seconds()
+        return total_seconds <= seconds_since_midnight
+
+    async def use_second_shortener(self, user_id, time):
+        user = await self.get_notcopy_user(user_id)
+        if not user.get("second_time_verified"):
+            ist_timezone = pytz.timezone('Asia/Kolkata')
+            await self.update_notcopy_user(user_id, {"second_time_verified":datetime.datetime(2019, 5, 17, 0, 0, 0, tzinfo=ist_timezone)})
+            user = await self.get_notcopy_user(user_id)
+        if await self.is_user_verified(user_id):
+            try:
+                pastDate = user["last_verified"]
+            except Exception:
+                user = await self.get_notcopy_user(user_id)
+                pastDate = user["last_verified"]
+            ist_timezone = pytz.timezone('Asia/Kolkata')
+            pastDate = pastDate.astimezone(ist_timezone)
+            current_time = datetime.datetime.now(tz=ist_timezone)
+            time_difference = current_time - pastDate
+            if time_difference > datetime.timedelta(seconds=time):
+                pastDate = user["last_verified"].astimezone(ist_timezone)
+                second_time = user["second_time_verified"].astimezone(ist_timezone)
+                return second_time < pastDate
+        return False
+
+    async def use_third_shortener(self, user_id, time):
+        user = await self.get_notcopy_user(user_id)
+        if not user.get("third_time_verified"):
+            ist_timezone = pytz.timezone('Asia/Kolkata')
+            await self.update_notcopy_user(user_id, {"third_time_verified":datetime.datetime(2018, 5, 17, 0, 0, 0, tzinfo=ist_timezone)})
+            user = await self.get_notcopy_user(user_id)
+        if await self.user_verified(user_id):
+            try:
+                pastDate = user["second_time_verified"]
+            except Exception:
+                user = await self.get_notcopy_user(user_id)
+                pastDate = user["second_time_verified"]
+            ist_timezone = pytz.timezone('Asia/Kolkata')
+            pastDate = pastDate.astimezone(ist_timezone)
+            current_time = datetime.datetime.now(tz=ist_timezone)
+            time_difference = current_time - pastDate
+            if time_difference > datetime.timedelta(seconds=time):
+                pastDate = user["second_time_verified"].astimezone(ist_timezone)
+                second_time = user["third_time_verified"].astimezone(ist_timezone)
+                return second_time < pastDate
+        return False
+   
+    async def create_verify_id(self, user_id: int, hash):
+        res = {"user_id": user_id, "hash":hash, "verified":False}
+        return await self.verify_id.insert_one(res)
+
+    async def get_verify_id_info(self, user_id: int, hash):
+        return await self.verify_id.find_one({"user_id": user_id, "hash": hash})
+
+    async def update_verify_id_info(self, user_id, hash, value: dict):
+        myquery = {"user_id": user_id, "hash": hash}
+        newvalues = { "$set": value }
+        return await self.verify_id.update_one(myquery, newvalues)
+        
+    async def has_premium_access(self, user_id):
+        user_data = await self.get_user(user_id)
+        if user_data:
+            expiry_time = user_data.get("expiry_time")
+            if expiry_time is None:
+                return False
+            elif isinstance(expiry_time, datetime.datetime) and datetime.datetime.now() <= expiry_time:
+                return True
+            else:
+                await self.users.update_one({"id": user_id}, {"$set": {"expiry_time": None}})
+        return False
+        
+    async def update_user(self, user_data):
+        await self.users.update_one({"id": user_data["id"]}, {"$set": user_data}, upsert=True)
+
+    async def update_one(self, filter_query, update_data):
+        try:
+            result = await self.users.update_one(filter_query, update_data)
+            return result.matched_count == 1
+        except Exception as e:
+            LOGGER.error(f"Error updating document: {e}")
+            return False
+            
+    # Premium expired reminder ( This Code Modified By @BOT_OWNER26)
+    async def get_expired(self, current_time):
+        expired_users = []
+        cursor = self.users.find({"expiry_time": {"$lt": current_time}})
+        async for user in cursor:
+            expired_users.append(user)
+        return expired_users
+
+    # Premium expired reminder ( This Code Modified By @BOT_OWNER26)
+    async def get_expiring_soon(self, label, delta):
+        reminder_key = f"reminder_{label}_sent"
+        now = datetime.datetime.utcnow()
+        target_time = now + delta
+        window = timedelta(seconds=30)
+
+        start_range = target_time - window
+        end_range = target_time + window
+
+        reminder_users = []
+        cursor = self.users.find({
+            "expiry_time": {"$gte": start_range, "$lte": end_range},
+            reminder_key: {"$ne": True}
+        })
+
+        async for user in cursor:
+            reminder_users.append(user)
+            await self.users.update_one(
+                {"id": user["id"]}, {"$set": {reminder_key: True}}
+            )
+
+        return reminder_users
+
+    async def remove_premium_access(self, user_id):
+        return await self.update_one(
+            {"id": user_id}, {"$set": {"expiry_time": None}}
         )
 
-        return {}
+    async def check_trial_status(self, user_id):
+        user_data = await self.get_user(user_id)
+        if user_data:
+            return user_data.get("has_free_trial", False)
+        return False
+
+    async def give_free_trial(self, user_id):
+        user_id = user_id
+        seconds = 5*60         
+        expiry_time = datetime.datetime.now() + datetime.timedelta(seconds=seconds)
+        user_data = {"id": user_id, "expiry_time": expiry_time, "has_free_trial": True}
+        await self.users.update_one({"id": user_id}, {"$set": user_data}, upsert=True)
+
+    async def all_premium_users(self):
+        count = await self.users.count_documents({
+        "expiry_time": {"$gt": datetime.datetime.now()}
+        })
+        return count
+    
+    async def get_bot_setting(self, bot_id, setting_key, default_value):
+        bot = await self.botcol.find_one({'id': int(bot_id)}, {setting_key: 1, '_id': 0})
+        return bot[setting_key] if bot and setting_key in bot else default_value
+        
+    async def update_bot_setting(self, bot_id, setting_key, value):
+        await self.botcol.update_one(
+            {'id': int(bot_id)}, 
+            {'$set': {setting_key: value}}, 
+            upsert=True
+        )
+
+    async def connect_group(self, group_id, user_id):
+        user= await self.connection.find_one({'_id': user_id})
+        if user:
+            if group_id not in user["group_ids"]:
+                await self.connection.update_one({'_id': user_id}, {"$push": {"group_ids": group_id}})
+        else:
+            await self.connection.insert_one({'_id': user_id, 'group_ids': [group_id]})
+
+    async def get_connected_grps(self, user_id):
+        user = await self.connection.find_one({'_id': user_id})
+        if user:
+            return user["group_ids"]
+        else:
+            return []
+
+    async def get_maintenance_status(self, bot_id):
+        return await self.get_bot_setting(bot_id, 'MAINTENANCE_MODE', MAINTENANCE_MODE)
+
+    async def update_maintenance_status(self, bot_id, enable):
+        await self.update_bot_setting(bot_id, 'MAINTENANCE_MODE', enable)
+
+    async def pm_search_status(self, bot_id):
+        return await self.get_bot_setting(bot_id, 'PM_SEARCH', PM_SEARCH)
+
+    async def update_pm_search_status(self, bot_id, enable):
+        await self.update_bot_setting(bot_id, 'PM_SEARCH', enable)
+
+    async def movie_update_status(self, bot_id):
+        return await self.get_bot_setting(bot_id, 'MOVIE_UPDATE_NOTIFICATION', MOVIE_UPDATE_NOTIFICATION)
+
+    async def update_movie_update_status(self, bot_id, enable):
+        await self.update_bot_setting(bot_id, 'MOVIE_UPDATE_NOTIFICATION', enable)
+
+        
+db = Database(DATABASE_URI, DATABASE_NAME)    
+db2 = Database(DATABASE_URI2, DATABASE_NAME)
