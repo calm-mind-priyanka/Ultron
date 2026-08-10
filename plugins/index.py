@@ -13,6 +13,13 @@ from logging_helper import LOGGER
 
 
 lock = asyncio.Lock()
+DB_SAVE_CONCURRENCY = 10
+save_semaphore = asyncio.Semaphore(DB_SAVE_CONCURRENCY)
+
+
+async def _save_file_limited(media):
+    async with save_semaphore:
+        return await save_file(media)
 
 @Client.on_callback_query(filters.regex(r'^index'))
 async def index_files(bot, query):
@@ -192,7 +199,7 @@ async def index_files_to_db(lst_msg_id, chat, msg, bot):
                             continue
                         media.file_type = message.media.value
                         media.caption = message.caption
-                        save_tasks.append(save_file(media))
+                        save_tasks.append(_save_file_limited(media))
 
                     except Exception:
                         errors += 1
