@@ -1239,9 +1239,7 @@ async def clone_callbacks(bot, query):
                 await _source_client(source)
             )
 
-            count = f"{await db[
-                source['collection']
-            ].estimated_document_count():,}"
+            count = f"{await db[source['collection']].estimated_document_count():,}"
 
             client.close()
 
