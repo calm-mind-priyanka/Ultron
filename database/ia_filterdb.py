@@ -112,6 +112,21 @@ async def check_db_size(silentdb):
         LOGGER.error(f"Error checking DB size: {e}")
         return 0
     
+async def get_current_db_target() -> str:
+    """Return the database currently selected for NEW writes.
+
+    This is only a write-target indicator. A full database remains fully
+    readable and searchable; reaching DB_CHANGE_LIMIT only switches new
+    writes from Primary to Secondary.
+    """
+    if not MULTIPLE_DB:
+        return "Primary"
+
+    size = await check_db_size(Media.collection.database)
+    limit = int(DB_CHANGE_LIMIT) * 1024 * 1024
+    return "Secondary" if size >= limit else "Primary"
+
+
 async def save_file(media) -> Tuple[bool, int]:
     """
     Save a media document to the primary DB until the configured safety limit
@@ -221,10 +236,7 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
         settings = await get_settings(int(chat_id))
         try:
             user_max_btn = settings.get('max_btn')
-            if user_max_btn:
-                max_results = 10
-            else:
-                max_results = int(MAX_B_TN)
+            max_results = 10 if user_max_btn else int(MAX_B_TN)
         except (KeyError, ValueError):
             await save_group_settings(int(chat_id), 'max_btn', False)
             max_results = int(MAX_B_TN)
@@ -238,12 +250,13 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
             filter = {'$or': [{'file_name': regex}, {'caption': regex}]}
         else:
             filter = {'file_name': regex}
+
     if file_type:
         filter['file_type'] = file_type
+
     if max_results % 2 != 0:
         max_results += 1
 
-    # Use field projection to reduce data transfer
     projection = {
         'file_name': 1,
         'file_size': 1,
@@ -253,39 +266,88 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
         '_id': 1
     }
 
-    cursor1 = Media.find(filter, projection).sort('$natural', -1).skip(offset).limit(max_results)
-    files = await cursor1.to_list(length=max_results)
-    total_results = 0
+    # Search Primary first. A MongoDB quota/full condition blocks writes,
+    # not reads, so a full Primary must remain searchable. If Primary is
+    # temporarily unavailable, continue with Secondary instead of crashing.
+    primary_files = []
+    primary_count = 0
+    primary_ok = False
+
+    try:
+        primary_count = await Media.count_documents(filter)
+        primary_ok = True
+        primary_files = await (
+            Media.find(filter, projection)
+            .sort('$natural', -1)
+            .skip(offset)
+            .limit(max_results)
+            .to_list(length=max_results)
+        )
+    except Exception as e:
+        LOGGER.warning(f"Primary DB search failed, trying Secondary: {e}")
 
     if not MULTIPLE_DB:
-        if offset == 0 and len(files) < max_results:
-            total_results = len(files)
-        else:
-            total_results = await Media.count_documents(filter)
-    else:
-        # Use asyncio.gather for concurrent counting
-        count_db1_task = Media.count_documents(filter)
-        count_db2_task = Media2.count_documents(filter)
-        count_db1, count_db2 = await asyncio.gather(count_db1_task, count_db2_task)
-        total_results = count_db1 + count_db2
+        total_results = primary_count if primary_ok else 0
+        next_offset = offset + len(primary_files)
+        if next_offset >= total_results or not primary_files:
+            next_offset = 0
+        return primary_files, next_offset, total_results
 
-        if len(files) < max_results:
-            remaining_needed = max_results - len(files)
-            if len(files) > 0:
-                cursor2 = Media2.find(filter, projection).sort('$natural', -1).limit(remaining_needed)
-                files2 = await cursor2.to_list(length=remaining_needed)
-                files.extend(files2)
-            else:
-                if offset >= count_db1:
-                    offset_db2 = offset - count_db1
-                    cursor2 = Media2.find(filter, projection).sort('$natural', -1).skip(offset_db2).limit(max_results)
-                    files = await cursor2.to_list(length=max_results)
+    # If Primary returned fewer results than requested, fill the remaining
+    # slots from Secondary. If Primary is unavailable, start from the same
+    # logical offset in Secondary.
+    secondary_files = []
+    secondary_count = 0
+    secondary_ok = False
+
+    try:
+        secondary_count = await Media2.count_documents(filter)
+        secondary_ok = True
+
+        if len(primary_files) < max_results:
+            remaining = max_results - len(primary_files)
+            secondary_offset = max(0, offset - primary_count) if primary_ok else offset
+            secondary_files = await (
+                Media2.find(filter, projection)
+                .sort('$natural', -1)
+                .skip(secondary_offset)
+                .limit(remaining)
+                .to_list(length=remaining)
+            )
+    except Exception as e:
+        LOGGER.warning(f"Secondary DB search failed: {e}")
+
+    # Primary wins when the same canonical file id somehow exists in both
+    # databases. This is only a safety net; save_file() already checks both
+    # databases before inserting a new file.
+    files = []
+    seen_ids = set()
+
+    for file in primary_files + secondary_files:
+        file_id = getattr(file, 'file_id', None)
+        if file_id is None:
+            file_id = getattr(file, '_id', None)
+        if file_id in seen_ids:
+            continue
+        seen_ids.add(file_id)
+        files.append(file)
+
+    # Counts are normally additive because save_file prevents duplicates.
+    # If an old database contains duplicates, returned results are still
+    # de-duplicated so users never see the same file twice.
+    total_results = 0
+    if primary_ok:
+        total_results += primary_count
+    if secondary_ok:
+        total_results += secondary_count
 
     next_offset = offset + len(files)
-    if next_offset >= total_results or len(files) == 0:
+    if next_offset >= total_results or not files:
         next_offset = 0
+
     return files, next_offset, total_results
     
+
 async def get_bad_files(query, file_type=None):
     regex = get_regex_pattern(query)
     if not regex:
@@ -318,16 +380,30 @@ async def get_bad_files(query, file_type=None):
     
 
 async def get_file_details(query):
+    """Find a file in Primary first, then Secondary.
+
+    DB quota/full state must never disable reads. A full database can still
+    be queried; only writes need to move to the other database. If one DB is
+    temporarily unavailable, the other DB is still attempted.
+    """
     filter = {'file_id': query}
+
+    try:
+        result = await Media.find(filter).to_list(length=1)
+        if result:
+            return result
+    except Exception as e:
+        LOGGER.warning(f"Primary DB file lookup failed: {e}")
+
     if MULTIPLE_DB:
-        result1, result2 = await asyncio.gather(
-            Media.find(filter).to_list(length=1),
-            Media2.find(filter).to_list(length=1)
-        )
-        return result1 if result1 else result2
-    else:
-        cursor = Media.find(filter)
-        return await cursor.to_list(length=1)
+        try:
+            result = await Media2.find(filter).to_list(length=1)
+            if result:
+                return result
+        except Exception as e:
+            LOGGER.warning(f"Secondary DB file lookup failed: {e}")
+
+    return []
 
 
 def encode_file_id(s: bytes) -> str:
