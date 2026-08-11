@@ -5,7 +5,7 @@ from pyrogram import Client, filters, enums
 from pyrogram.errors import FloodWait
 from pyrogram.errors.exceptions.bad_request_400 import ChannelInvalid, ChatAdminRequired, UsernameInvalid, UsernameNotModified
 from info import ADMINS, INDEX_REQ_CHANNEL as LOG_CHANNEL
-from database.ia_filterdb import save_file
+from database.ia_filterdb import save_file, get_current_db_target
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from utils import temp, get_readable_time
 from math import ceil
@@ -158,8 +158,11 @@ async def index_files_to_db(lst_msg_id, chat, msg, bot):
                 return
             batches = ceil(total_messages / BATCH_SIZE)
             batch_times = []
+            target_db = await get_current_db_target()
+            target_icon = "🟢" if target_db == "Primary" else "🔵"
             await msg.edit(
                 f"📊 Indexing Starting......\n"
+                f"🎯 Target DB: {target_icon} <code>{target_db}</code>\n"
                 f"💬 Total Messages: <code>{total_messages}</code>\n"
                 f"💾 Total Fetch: <code> {total_fetch}</code>\n"
                 f"⏰ Elapsed: <code>{get_readable_time(time.time() - start_time)}</code>",
@@ -224,8 +227,11 @@ async def index_files_to_db(lst_msg_id, chat, msg, bot):
                 avg_batch_time = sum(batch_times) / len(batch_times) if batch_times else 1
                 eta = (total_fetch - progress) / BATCH_SIZE * avg_batch_time
                 progress_bar = get_progress_bar(int(percentage))
+                target_db = await get_current_db_target()
+                target_icon = "🟢" if target_db == "Primary" else "🔵"
                 await msg.edit(
                     f"📊 Indexing Progress\n"
+                    f"🎯 Target DB: {target_icon} <code>{target_db}</code>\n"
                     f"📦 Batch No: {batch + 1}/{batches}\n"
                     f"{progress_bar} <code>{percentage:.1f}%</code>\n"
                     f"💬 Total Messages: <code>{total_messages}</code>\n"
@@ -245,8 +251,11 @@ async def index_files_to_db(lst_msg_id, chat, msg, bot):
                 await asyncio.sleep(0)
 
             elapsed = time.time() - start_time
+            target_db = await get_current_db_target()
+            target_icon = "🟢" if target_db == "Primary" else "🔵"
             await msg.edit(
                 f"✅ Indexing Completed!\n"
+                f"🎯 Last Target DB: {target_icon} <code>{target_db}</code>\n"
                 f"💬 Total Message: <code>{total_messages}</code>a\n" 
                 f"📥 Total Fetch: <code>{total_fetch}</code>\n"
                 f"⬇️ Fetched: <code>{current}</code>\n"
