@@ -348,6 +348,126 @@ async def get_search_results(chat_id, query, file_type=None, max_results=10, off
     return files, next_offset, total_results
     
 
+
+
+def _normalize_search_text(text: str) -> str:
+    """Normalize a title/search string for fuzzy comparison."""
+    if not text:
+        return ""
+    text = str(text).lower()
+    text = re.sub(r"\b(19|20)\d{2}\b", " ", text)
+    text = re.sub(
+        r"\b(480p|576p|720p|1080p|1440p|2160p|4k|8k|hdr|hevc|x264|x265|h264|h265|bluray|blu-ray|web[- .]?dl|webrip|web rip|hdrip|dvdrip|camrip|proper|repack|dual audio|dual|audio|hindi|english|tamil|telugu|malayalam|bengali|dubbed|dubb|subbed|subtitle|subs|full movie|movie|film|download|watch|online|hd|fhd|uhd)\b",
+        " ",
+        text,
+        flags=re.IGNORECASE,
+    )
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _collapse_repeated_letters(text: str) -> str:
+    """Reduce accidental key-holding/repeated-letter typos."""
+    return re.sub(r"(.)\1{2,}", r"\1", text)
+
+
+async def get_fuzzy_search_results(chat_id, query: str, limit: int = 25, threshold: int = 82):
+    """Find likely files already stored in DB1/DB2 using fuzzy title matching.
+
+    This is intentionally a *local* correction layer. It never invents a movie:
+    every returned result is an actual Media/Media2 document. Exact Mongo search
+    remains the first stage; this function is only used after exact search fails.
+    """
+    from fuzzywuzzy import fuzz
+
+    normalized_query = _normalize_search_text(query)
+    if not normalized_query or len(normalized_query) < 2:
+        return [], None, 0
+
+    # Use distinctive query tokens to cheaply narrow Mongo candidates before
+    # doing fuzzy scoring. The first 3 characters also catch many misspellings
+    # such as "dhunandhaaaar" -> "dhurandhar".
+    tokens = [t for t in normalized_query.split() if len(t) >= 3]
+    if not tokens:
+        tokens = [normalized_query]
+
+    prefixes = list(dict.fromkeys(t[:3] for t in tokens if len(t) >= 3))[:4]
+    regex_parts = []
+    for prefix in prefixes:
+        regex_parts.append(re.escape(prefix))
+
+    if not regex_parts:
+        return [], None, 0
+
+    pattern = re.compile("|".join(regex_parts), re.IGNORECASE)
+    mongo_filter = {'file_name': pattern}
+    projection = {
+        'file_name': 1,
+        'file_size': 1,
+        'file_id': 1,
+        'file_type': 1,
+        'caption': 1,
+        '_id': 1,
+    }
+
+    async def fetch(media_class):
+        try:
+            return await media_class.find(mongo_filter, projection).limit(limit * 4).to_list(length=limit * 4)
+        except Exception as e:
+            LOGGER.warning(f"Fuzzy candidate search failed: {e}")
+            return []
+
+    primary = await fetch(Media)
+    secondary = await fetch(Media2) if MULTIPLE_DB else []
+
+    candidates = []
+    seen = set()
+    for item in primary + secondary:
+        fid = getattr(item, 'file_id', None) or getattr(item, '_id', None)
+        if fid in seen:
+            continue
+        seen.add(fid)
+        name = getattr(item, 'file_name', '') or ''
+        normalized_name = _normalize_search_text(name)
+        if not normalized_name:
+            continue
+
+        # token_set handles extra words such as language/quality metadata;
+        # WRatio helps with reordered/partial titles.
+        collapsed_query = _collapse_repeated_letters(normalized_query)
+        collapsed_name = _collapse_repeated_letters(normalized_name)
+        score = max(
+            fuzz.token_set_ratio(normalized_query, normalized_name),
+            fuzz.WRatio(normalized_query, normalized_name),
+            fuzz.partial_ratio(normalized_query, normalized_name),
+            fuzz.token_set_ratio(collapsed_query, collapsed_name),
+            fuzz.WRatio(collapsed_query, collapsed_name),
+            fuzz.partial_ratio(collapsed_query, collapsed_name),
+        )
+        if score >= threshold:
+            candidates.append((score, item, name))
+
+    candidates.sort(key=lambda x: x[0], reverse=True)
+    if not candidates:
+        return [], None, 0
+
+    best_score, best_file, best_name = candidates[0]
+    # Require a stronger score for very short queries to avoid false positives.
+    if len(normalized_query.replace(' ', '')) <= 4 and best_score < 90:
+        return [], None, 0
+
+    # Return all files matching the winning stored filename through the normal
+    # exact search path. This keeps pagination/buttons/DB behavior unchanged.
+    files, offset, total = await get_search_results(
+        chat_id=chat_id,
+        query=best_name,
+        offset=0,
+        filter=True,
+    )
+    if not files:
+        return [], None, 0
+    return files, best_name, best_score
+
 async def get_bad_files(query, file_type=None):
     regex = get_regex_pattern(query)
     if not regex:
