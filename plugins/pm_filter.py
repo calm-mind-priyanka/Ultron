@@ -126,7 +126,11 @@ async def refercall(bot, query):
     await query.answer()
 
 async def build_pagination_buttons(btn, total_results, current_offset, next_offset, req, key, settings):
-    limit = 10 if settings.get('max_btn') else int(MAX_B_TN)
+    user_max_btn = settings.get("max_btn")
+try:
+    limit = int(user_max_btn) if user_max_btn else int(MAX_B_TN)
+except (TypeError, ValueError):
+    limit = int(MAX_B_TN)
     total_pages = math.ceil(total_results / limit)
     current_page = math.ceil(current_offset / limit) + 1
     pagination_row = []
@@ -1246,11 +1250,7 @@ async def ai_spell_check(chat_id, wrong_name):
 
 
 async def advantage_spell_chok(client, message, status_message=None):
-    """Final no-result guidance.
-
-    If the caller already created a "Searching..." message, edit that same
-    message instead of sending a second no-result message.
-    """
+    """Final no-result guidance. Called only after every search/correction path fails."""
     search = message.text
     google = quote_plus(search)
 
@@ -1283,23 +1283,19 @@ async def advantage_spell_chok(client, message, status_message=None):
 
     try:
         if status_message:
-            # Replace the existing "🎯 Searching..." message.
             k = await status_message.edit_text(
                 text=help_text,
                 reply_markup=InlineKeyboardMarkup(buttons),
                 disable_web_page_preview=True,
             )
         else:
-            # Fallback for any other caller that does not provide a status message.
             k = await message.reply_text(
                 text=help_text,
                 reply_markup=InlineKeyboardMarkup(buttons),
                 reply_to_message_id=message.id,
                 disable_web_page_preview=True,
             )
-
         await asyncio.sleep(60)
-
         try:
             await k.delete()
         except Exception:
