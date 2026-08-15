@@ -17,7 +17,7 @@ from pyrogram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerId
 from utils import *
 from fuzzywuzzy import process
 from database.users_chats_db import db
-from database.ia_filterdb import Media, Media2, get_file_details, get_search_results, get_bad_files
+from database.ia_filterdb import Media, Media2, get_file_details, get_search_results, get_bad_files, get_fuzzy_search_results
 from logging_helper import LOGGER
 from urllib.parse import quote_plus
 from Lucia.util.file_properties import get_name, get_hash, get_media_file_size
@@ -872,6 +872,39 @@ async def auto_filter(client, msg, spoll=False):
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
             settings = await get_settings(message.chat.id)
             if not files:
+                # Stage 2: local DB-aware hybrid correction. This runs before
+                # IMDb so a typo can be corrected from titles that actually
+                # exist in DB1/DB2. The database remains the final authority.
+                try:
+                    fuzzy_files, fuzzy_title, fuzzy_score = await asyncio.wait_for(
+                        get_fuzzy_search_results(
+                            chat_id=message.chat.id,
+                            query=message.text,
+                            limit=40,
+                            threshold=80,
+                        ),
+                        timeout=8,
+                    )
+                except Exception as e:
+                    LOGGER.warning(f"Hybrid DB spelling search failed/timeout: {e}")
+                    fuzzy_files, fuzzy_title, fuzzy_score = [], None, 0
+
+                if fuzzy_files and fuzzy_title:
+                    try:
+                        await m.edit(
+                            f'<b>✅ Aɪ Sᴜɢɢᴇsᴛᴇᴅ Mᴇ <code>{fuzzy_title}</code>\n'
+                            f'Sᴏ Iᴍ SᴇᴀRᴄʜɪɴɢ ғᴏʀ <code>{fuzzy_title}</code></b>'
+                        )
+                        await asyncio.sleep(1.5)
+                    except Exception:
+                        pass
+                    message.text = fuzzy_title
+                    try:
+                        await m.delete()
+                    except Exception:
+                        pass
+                    return await auto_filter(client, message)
+
                 if settings.get("spell_check", False):
                     ai_sts = await m.edit(
                         '🤖 ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ, ᴀɪ ɪꜱ ᴄʜᴇᴄᴋɪɴɢ ʏᴏᴜʀ ꜱᴘᴇʟʟɪɴɢ...'
