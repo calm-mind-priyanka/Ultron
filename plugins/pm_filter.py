@@ -935,7 +935,7 @@ async def auto_filter(client, msg, spoll=False):
                                 search = is_misspelled
 
                 if not files:
-                    return await advantage_spell_chok(client, message)
+                    return await advantage_spell_chok(client, message, m)
         else:
             return
     else:
@@ -1245,8 +1245,12 @@ async def ai_spell_check(chat_id, wrong_name):
     return None
 
 
-async def advantage_spell_chok(client, message):
-    """Final no-result guidance. Called only after every search/correction path fails."""
+async def advantage_spell_chok(client, message, status_message=None):
+    """Final no-result guidance.
+
+    If the caller already created a "Searching..." message, edit that same
+    message instead of sending a second no-result message.
+    """
     search = message.text
     google = quote_plus(search)
 
@@ -1278,13 +1282,24 @@ async def advantage_spell_chok(client, message):
     ]]
 
     try:
-        k = await message.reply_text(
-            text=help_text,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            reply_to_message_id=message.id,
-            disable_web_page_preview=True,
-        )
+        if status_message:
+            # Replace the existing "🎯 Searching..." message.
+            k = await status_message.edit_text(
+                text=help_text,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                disable_web_page_preview=True,
+            )
+        else:
+            # Fallback for any other caller that does not provide a status message.
+            k = await message.reply_text(
+                text=help_text,
+                reply_markup=InlineKeyboardMarkup(buttons),
+                reply_to_message_id=message.id,
+                disable_web_page_preview=True,
+            )
+
         await asyncio.sleep(60)
+
         try:
             await k.delete()
         except Exception:
