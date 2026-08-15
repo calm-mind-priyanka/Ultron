@@ -17,7 +17,7 @@ from pyrogram.errors import FloodWait, UserIsBlocked, MessageNotModified, PeerId
 from utils import *
 from fuzzywuzzy import process
 from database.users_chats_db import db
-from database.ia_filterdb import Media, Media2, get_file_details, get_search_results, get_bad_files
+from database.ia_filterdb import Media, Media2, get_file_details, get_search_results, get_bad_files, get_fuzzy_search_results
 from logging_helper import LOGGER
 from urllib.parse import quote_plus
 from Lucia.util.file_properties import get_name, get_hash, get_media_file_size
@@ -872,17 +872,58 @@ async def auto_filter(client, msg, spoll=False):
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
             settings = await get_settings(message.chat.id)
             if not files:
+                # Stage 2: local/hybrid correction. This is faster than IMDb and
+                # only returns files that actually exist in DB1/DB2.
+                fuzzy_files, fuzzy_name, fuzzy_score = await _run_with_timeout(
+                    get_fuzzy_search_results(message.chat.id, search),
+                    5,
+                    ([], None, 0),
+                )
+                if fuzzy_files:
+                    try:
+                        await m.edit(
+                            f'<b>✨ Cᴏʀʀᴇᴄᴛᴇᴅ Sᴇᴀʀᴄ: <code>{fuzzy_name}</code>\n'
+                            f'🔎 Fᴏᴜɴᴅ Wɪᴛʜ {fuzzy_score}% Mᴀᴛᴄ</b>'
+                        )
+                        await asyncio.sleep(1)
+                    except Exception:
+                        pass
+                    message.text = fuzzy_name
+                    try:
+                        await m.delete()
+                    except Exception:
+                        pass
+                    # Re-enter the normal result renderer with the corrected
+                    # query. The corrected title was already verified in DBs.
+                    return await auto_filter(client, message)
+
+                # Stage 3: existing IMDb AI spelling fallback. It is protected
+                # by hard timeouts so this message can never hang indefinitely.
                 if settings["spell_check"]:
                     ai_sts = await m.edit('🤖 ᴘʟᴇᴀꜱᴇ ᴡᴀɪᴛ, ᴀɪ ɪꜱ ᴄʜᴇᴄᴋɪɴɢ ʏᴏᴜʀ ꜱᴘᴇʟʟɪɴɢ...')
-                    is_misspelled = await ai_spell_check(chat_id = message.chat.id,wrong_name=search)
+                    is_misspelled = await _run_with_timeout(
+                        ai_spell_check(chat_id=message.chat.id, wrong_name=search),
+                        15,
+                        None,
+                    )
                     if is_misspelled:
-                        await ai_sts.edit(f'<b><i>✅ Aɪ Sᴜɢɢᴇsᴛᴇᴅ ᴍᴇ<code> {is_misspelled}</code> \nSᴏ Iᴍ SᴇᴀRᴄʜɪɴɢ ғᴏʀ <code>{is_misspelled}</code></i></b>')
-                        await asyncio.sleep(2)
+                        await ai_sts.edit(
+                            f'<b><i>✅ Aɪ Sᴜɢɢᴇsᴛᴇᴅ Mᴇ <code>{is_misspelled}</code>\n'
+                            f'Sᴏ I M Sᴇᴀʀᴄʜɪɴɢ Fᴏʀ <code>{is_misspelled}</code></i></b>'
+                        )
+                        await asyncio.sleep(1)
                         message.text = is_misspelled
-                        await ai_sts.delete()
+                        try:
+                            await ai_sts.delete()
+                        except Exception:
+                            pass
                         return await auto_filter(client, message)
-                    await ai_sts.delete()
-                    return await advantage_spell_chok(client, message)
+                    try:
+                        await ai_sts.delete()
+                    except Exception:
+                        pass
+                # Final stage: only now show the guidance/no-result message.
+                return await show_no_result_guidance(client, message)
         else:
             return
     else:
@@ -1056,23 +1097,96 @@ async def auto_filter(client, msg, spoll=False):
         await save_group_settings(message.chat.id, 'auto_delete', True)
         pass
 
+async def _run_with_timeout(coro, timeout, default=None):
+    """Run an async operation with a hard timeout and never block the search flow."""
+    try:
+        return await asyncio.wait_for(coro, timeout=timeout)
+    except asyncio.TimeoutError:
+        LOGGER.warning("Search/IMDb operation timed out")
+        return default
+    except Exception as e:
+        LOGGER.warning(f"Search/IMDb operation failed: {e}")
+        return default
+
+
 async def ai_spell_check(chat_id, wrong_name):
-    async def search_movie(wrong_name):
-        search_results = await asyncio.to_thread(imdb.search_movie, wrong_name)
-        movie_list = [movie.title for movie in search_results.titles]
-        return movie_list
+    """Existing IMDb spelling fallback with timeout and DB verification.
+
+    IMDb is used only after the local/fuzzy layer fails. A suggestion is valid
+    only when the corrected title actually returns files from DB1/DB2.
+    """
+    async def search_movie(value):
+        result = await _run_with_timeout(
+            asyncio.to_thread(imdb.search_movie, value),
+            8,
+            None,
+        )
+        if not result or not getattr(result, 'titles', None):
+            return []
+        return [movie.title for movie in result.titles[:20] if getattr(movie, 'title', None)]
+
     movie_list = await search_movie(wrong_name)
     if not movie_list:
-        return
-    for _ in range(5):
-        closest_match = process.extractOne(wrong_name, movie_list)
+        return None
+
+    remaining = list(dict.fromkeys(movie_list))
+    for _ in range(min(5, len(remaining))):
+        closest_match = process.extractOne(wrong_name, remaining)
         if not closest_match or closest_match[1] <= 80:
-            return 
+            return None
+
         movie = closest_match[0]
-        files, offset, total_results = await get_search_results(chat_id=chat_id, query=movie)
-        if files:
+        files = await _run_with_timeout(
+            get_search_results(chat_id=chat_id, query=movie, offset=0, filter=True),
+            5,
+            ([], 0, 0),
+        )
+        if files and files[0]:
             return movie
-        movie_list.remove(movie)
+        remaining.remove(movie)
+
+    return None
+
+
+async def show_no_result_guidance(client, message):
+    """Show useful search-format guidance only after every search stage fails."""
+    search = message.text.strip()
+    google = quote_plus(search)
+    text = (
+        "<b>* Sᴇᴀʀᴄʜ Mᴏᴠɪᴇ Wɪᴛʜ Cᴏʀʀᴇᴄᴛ Sᴘᴇʟʟɪɴɢ :</b>\n"
+        "<b>› ᴀᴠᴀᴛᴀʀ 2009 ✅\n"
+        "› ᴀᴠᴀᴛᴀʀ ʜɪɴᴅɪ ✅\n"
+        "› ᴀᴠᴀᴛᴀʀ ᴍᴏᴠɪᴇ ❌\n"
+        "› ᴀᴠᴀᴛᴀʀ ʜɪɴᴅɪ ᴅᴜʙʙᴇᴅ ❌</b>\n\n"
+        "<b>🔹 Sᴇᴀʀᴄʜ Wᴇʙ Sᴇʀɪᴇs Iɴ Tʜɪs Fᴏʀᴍᴀᴛᴇ :</b>\n"
+        "<b>› ᴠɪᴋɪɴɢs S01 ✅\n"
+        "› ᴠɪᴋɪɴɢs S01E01 ✅\n"
+        "› ᴠɪᴋɪɴɢs S01 ʜɪɴᴅɪ ✅\n"
+        "› ᴠɪᴋɪɴɢs S01 ʜɪɴᴅɪ ᴅᴜʙʙ ❌\n"
+        "› ᴠɪᴋɪɴɢs sᴇᴀsᴏɴ 1 ❌\n"
+        "› ᴠɪᴋɪɴɢs ᴡᴇʙ sᴇʀɪᴇs ❌</b>"
+    )
+    button = [[
+        InlineKeyboardButton("🔍 Cʜᴇᴄᴋ Oɴ Gᴏᴏɢʟᴇ", url=f"https://www.google.com/search?q={google}")
+    ]]
+    try:
+        result_message = await message.reply_text(
+            text=text,
+            reply_markup=InlineKeyboardMarkup(button),
+            reply_to_message_id=message.id,
+            disable_web_page_preview=True,
+        )
+        await asyncio.sleep(60)
+        try:
+            await result_message.delete()
+        except Exception:
+            pass
+    finally:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+
 
 async def advantage_spell_chok(client, message):
     mv_id = message.id
